@@ -18,11 +18,30 @@ class InterceptingProxyRequest(ProxyRequest):
 
         headers = self.getAllHeaders().copy()
 
-        self.content.seek(0,  0)
-        data =  self.content.read()
+        self.content.close()
 
-        self.file = self.get(self.uri, headers, data)
+        if self.method != 'GET':
+            return self.error_501()
+
+        if self.clientproto != 'HTTP/1.0':
+            return self.error_505()
+
+        self.file = self.get(self.uri, headers)
         self.file.readToMe(self, reactor)
+
+    def error_501():
+        self.transport.write("HTTP/1.0 501 Not implemented\r\n")
+        self.transport.write("Content-Type: text/html\r\n")
+        self.transport.write("\r\n")
+        self.transport.write('''<H1>Only GET requests are supported!</H1>''')
+        self.transport.loseConnection()
+
+    def error_505():
+        self.transport.write("HTTP/1.0 505 HTTP Version Not Supported\r\n")
+        self.transport.write("Content-Type: text/html\r\n")
+        self.transport.write("\r\n")
+        self.transport.write('''<H1>Only HTTP/1.0 is supported!</H1>''')
+        self.transport.loseConnection()
 
     def connectionLost(self, reason):
         print "lost connection!"

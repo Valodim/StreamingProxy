@@ -45,7 +45,7 @@ class InterceptingProxyClientFactory(ProxyClientFactory):
 class cachedFile(object):
     ports = {"http" : 80}
 
-    def __init__(self, uri, headers, data):
+    def __init__(self, uri, headers):
         parsed =  urlparse.urlparse(uri)
 
         self.protocol =  parsed[0]
@@ -63,10 +63,8 @@ class cachedFile(object):
             headers['host'] = self.host
         self.headers = headers
 
-        self.data = data
-
     def readToMe(self, me, reactor):
-        clientFactory = InterceptingProxyClientFactory('GET', self.rest, 'HTTP/1.0', self.headers, self.data, me)
+        clientFactory = InterceptingProxyClientFactory('GET', self.rest, 'HTTP/1.0', self.headers, { }, me)
 
         self.nection = reactor.connectTCP(self.host, self.port, clientFactory)
 
