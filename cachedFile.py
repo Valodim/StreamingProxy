@@ -7,23 +7,42 @@ class InterceptingProxyClient(ProxyClient):
         print "+ connection", self
         ProxyClient.__init__(self, *args, **kwargs)
 
+    def handleStatus(self, version, code, message):
+        if message:
+            # Add a whitespace to message, this allows empty messages
+            # transparently
+            message = " %s" % (message,)
+        self.father.transport.write("%s %s%s\r\n" % (version, code, message))
+
     def handleHeader(self, key, value):
-        print key, " - ", value
-        ProxyClient.handleHeader(self, key, value)
 
-    # def handleEndHeaders(self):
-        # print "done headers."
-        # ProxyClient.handleEndHeaders(self)
+        # save some important ones
+        if key.lower() == 'content-type':
+            self.father.setContentType(value)
 
-      #def handleResponsePart(self, buffer):
-            #print buffer
-            #if self.image_parser:
-                  #self.image_parser.feed(buffer)
-            #else:
-                  #ProxyClient.handleResponsePart(self, buffer)
+        if key.lower() == 'length':
+            self.father.setContentLength(int(value))
+
+        # print key, " -- ", value
+        self.father.transport.write("%s: %s\r\n" % (key, value))
+
+    def handleEndHeaders(self):
+        self.father.transport.write("\r\n")
+
+    def handleResponsePart(self, buffer):
+        self.father.transport.write(buffer)
 
     def handleResponseEnd(self):
-        print "- connection", self
+        self.transport.loseConnection()
+        self.father.channel.transport.loseConnection()
+
+    def handleStatus(self, version, code, message):
+        if message:
+            # Add a whitespace to message, this allows empty messages transparently
+            message = " %s" % (message,)
+            self.father.transport.write("%s %s%s\r\n" % (version, code, message))
+
+    def handleResponseEnd(self):
         # if self.image_parser:
             # image = self.image_parser.close()
             # try:
@@ -41,6 +60,9 @@ class InterceptingProxyClient(ProxyClient):
 
 class InterceptingProxyClientFactory(ProxyClientFactory):
     protocol = InterceptingProxyClient
+
+    def clientConnectionFailed(self, connector, reason):
+        self.father.error_cnc(reason)
 
 class cachedFile(object):
     ports = {"http" : 80}
@@ -63,10 +85,24 @@ class cachedFile(object):
             headers['host'] = self.host
         self.headers = headers
 
-    def readToMe(self, me, reactor):
-        clientFactory = InterceptingProxyClientFactory('GET', self.rest, 'HTTP/1.0', self.headers, { }, me)
+        print headers
 
+    def setContentType(self, type):
+        self.type = type
+
+    def setLength(self, length):
+        self.length = length
+
+    def request(self, me, reactor, range_from, range_to):
+        self.transport = me.transport
+        self.me = me
+
+        clientFactory = InterceptingProxyClientFactory('GET', self.rest, 'HTTP/1.0', self.headers, { }, self)
         self.nection = reactor.connectTCP(self.host, self.port, clientFactory)
+
+    def finish(self):
+        print "finish."
+        self.me.finish()
 
     def stopReading(self):
         self.nection.disconnect()

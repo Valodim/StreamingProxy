@@ -9,6 +9,8 @@ class InterceptingProxyRequest(ProxyRequest):
     files = { }
 
     def get(self, uri, *args, **kwargs):
+        return cachedFile(uri, *args, **kwargs)
+
         if uri not in self.files:
             self.files[uri] = cachedFile(uri, *args, **kwargs)
 
@@ -26,17 +28,29 @@ class InterceptingProxyRequest(ProxyRequest):
         if self.clientproto != 'HTTP/1.0':
             return self.error_505()
 
-        self.file = self.get(self.uri, headers)
-        self.file.readToMe(self, reactor)
+        # got a range request?
+        if 'range' in headers and headers['range'][0:6] == 'bytes=':
+            self.range_from, self.range_to = headers['range'][6:].split('-')
 
-    def error_501():
+        self.file = self.get(self.uri, headers)
+        self.file.request(self, reactor)
+
+    def error_cnc(self, reason):
+        print "ERROR: ", reason
+        self.transport.write("HTTP/1.0 501 Gateway error\r\n")
+        self.transport.write("Content-Type: text/html\r\n")
+        self.transport.write("\r\n")
+        self.transport.write('''<H1>Could not connect</H1>''')
+        self.transport.loseConnection()
+
+    def error_501(self):
         self.transport.write("HTTP/1.0 501 Not implemented\r\n")
         self.transport.write("Content-Type: text/html\r\n")
         self.transport.write("\r\n")
         self.transport.write('''<H1>Only GET requests are supported!</H1>''')
         self.transport.loseConnection()
 
-    def error_505():
+    def error_505(self):
         self.transport.write("HTTP/1.0 505 HTTP Version Not Supported\r\n")
         self.transport.write("Content-Type: text/html\r\n")
         self.transport.write("\r\n")
