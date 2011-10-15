@@ -1,4 +1,4 @@
-from twisted.internet import reactor
+from twisted.internet import reactor, defer
 from twisted.web import http
 from twisted.web.proxy import Proxy, ProxyRequest, ProxyClientFactory, ProxyClient
 from StringIO import StringIO
@@ -31,9 +31,25 @@ class InterceptingProxyRequest(ProxyRequest):
         # got a range request?
         if 'range' in headers and headers['range'][0:6] == 'bytes=':
             self.range_from, self.range_to = headers['range'][6:].split('-')
+        else:
+            self.range_from, self.range_to = (None,None)
+
+        print self.range_from, " ", self.range_to
 
         self.file = self.get(self.uri, headers)
-        self.file.request(self, reactor)
+
+        d = self.file.getInfo()
+        d.addCallback(self.process2)
+
+    def process2(self, info):
+        print "here we go!", info
+
+        self.transport.write("HTTP/1.0 200 OK\r\n")
+        for header in info:
+            self.transport.write("%s %s" % (header, info[header]))
+        self.transport.write("\r\n")
+
+        self.file.request(self, self.range_from, self.range_to)
 
     def error_cnc(self, reason):
         print "ERROR: ", reason
