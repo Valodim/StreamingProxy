@@ -45,8 +45,15 @@ class InterceptingProxyRequest(ProxyRequest):
         print "here we go!", info
 
         self.transport.write("HTTP/1.0 200 OK\r\n")
-        for header in info:
-            self.transport.write("%s %s" % (header, info[header]))
+
+        if 'type' in info and info['type']:
+            self.transport.write("content-type: %s\r\n" % info['type'])
+        if 'etag' in info and info['etag']:
+            self.transport.write("etag: %s\r\n" % info['etag'])
+
+        if self.range_from is None and self.range_to is None:
+            self.transport.write("content-length: %s\r\n" % info['length'])
+
         self.transport.write("\r\n")
 
         self.file.request(self, self.range_from, self.range_to)

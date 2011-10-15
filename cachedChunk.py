@@ -1,5 +1,9 @@
 from StringIO import StringIO
 
+from twisted.internet import reactor, defer
+
+from CacheClient import CacheClientFactory
+
 class cachedChunk(object):
     """ """
 
@@ -21,8 +25,14 @@ class cachedChunk(object):
              - if it's not, fetch to buffer and file simultaneously
         """
 
-        # clientFactory = InterceptingProxyClientFactory('GET', self.rest, 'HTTP/1.0', self.headers, { }, self)
-        # self.nection = reactor.connectTCP(self.host, self.port, clientFactory)
+        self.me = me
+        clientFactory = CacheClientFactory(self.file.rest, self.file.headers, self)
+        self.nection = reactor.connectTCP(self.file.host, self.file.port, clientFactory)
 
         pass
 
+    def write(self, buffer):
+        self.me.transport.write(buffer)
+
+    def eof(self):
+        print "EOF"

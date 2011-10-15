@@ -17,6 +17,12 @@ class cachedFile(object):
     got_info = False
 
     def __init__(self, uri, headers):
+        """
+        What this is supposed to do:
+         - find out length of file, possibly get ETag
+         - determine reasonable chunk size
+        """
+
         self.uri = uri
         self.hash = hashlib.sha1(uri).digest()
 
@@ -58,8 +64,8 @@ class cachedFile(object):
         d = defer.Deferred()
         def doGetSize(x):
             d.callback({
-                'content-length': self.length,
-                'content-type': self.type,
+                'length': self.length,
+                'type': self.type,
                 'etag': self.etag,
             })
         self.d.addCallback(doGetSize)
@@ -69,8 +75,6 @@ class cachedFile(object):
     def request(self, me, range_from, range_to):
         """
         What this is supposed to do:
-         - find out length of file, possibly get ETag
-         - determine reasonable chunk size
          - add first requested chunk to request queue
         """
 
@@ -86,7 +90,8 @@ class cachedFile(object):
 
         print "requesting: ", chunk_first, "-", chunk_last
 
-        if chunk_first == chunk_last:
+        if chunk_first != 0 or chunk_last != self.chunks:
+            print "not yet implemented - error!"
             return
 
         if chunk_first not in self.active_chunks:
