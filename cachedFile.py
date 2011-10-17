@@ -51,11 +51,13 @@ class cachedFile(object):
             self.type = headers['content-type'][0]
             self.etag = headers['etag'][0]
 
+            self.ranged = headers['accept-ranges'][0] == 'bytes'
+
             # in kb, so this is 10MB
             self.chunksize = 10*1024
             self.chunks = self.length / self.chunksize +1
 
-            print "got info. length:", self.length, ', type:', self.type, ', etag:', self.etag
+            print "got info. length:", self.length, ', type:', self.type, ', etag:', self.etag, ', accepts range' if self.ranged else ''
             print "chunksize ", self.chunksize, ", using ", self.chunks, "chunks"
 
         self.d.addCallback(info)
@@ -85,8 +87,8 @@ class cachedFile(object):
             self.d.addCallback(doReq)
             return
 
-        chunk_first = (range_from / self.chunksize) if range_from is not None else 0
-        chunk_last = (range_to / self.chunksize) if range_to is not None else self.chunks
+        chunk_first = (int(range_from) / self.chunksize) if range_from is not None else 0
+        chunk_last = (int(range_to) / self.chunksize) if range_to is not None else self.chunks
 
         print "requesting: ", chunk_first, "-", chunk_last
 

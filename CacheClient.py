@@ -12,6 +12,7 @@ class CacheClient(HTTPClient):
     def connectionMade(self):
         self.sendCommand('GET', self.rest)
         self.sendHeader('host', self.headers['host'])
+        self.sendHeader('connection', 'close')
         # for header in self.headers:
             # self.sendHeader(header, self.headers[header])
         self.endHeaders()

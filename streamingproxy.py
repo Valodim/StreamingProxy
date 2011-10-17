@@ -54,6 +54,8 @@ class InterceptingProxyRequest(ProxyRequest):
         if self.range_from is None and self.range_to is None:
             self.transport.write("content-length: %s\r\n" % info['length'])
 
+        self.transport.write("accept-ranges: bytes\r\n")
+
         self.transport.write("\r\n")
 
         self.file.request(self, self.range_from, self.range_to)
