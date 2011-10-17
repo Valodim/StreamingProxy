@@ -17,6 +17,9 @@ class CacheClient(HTTPClient):
             # self.sendHeader(header, self.headers[header])
         self.endHeaders()
 
+    def handleStatus(self, version, status, message):
+        print 'status: ', version, status, message
+
     def handleResponsePart(self, buffer):
         self.father.me.transport.write(buffer)
 
