@@ -121,6 +121,7 @@ class CachedRequest(object):
     """
 
     chunksize = 10*1024*1024
+    path = '/home/valodim/space/mlp/'
 
     def __init__(self, f, consumer, range_from, range_to):
         self.f = f
@@ -135,9 +136,28 @@ class CachedRequest(object):
 
         self.consumer = consumer
 
-        self.sendChunk(None)
+        self.cacheUpdate()
+        self.sendChunk()
 
-    def sendChunk(self, x):
+    def cacheUpdate(self, x = None):
+
+        missing_ranges = [ ]
+
+        idx = None
+
+        for i in range(self.chunk_first, self.chunk_last+1):
+            path = self.path + os.path.sep + str(i)
+
+            if not os.access(path, os.F_OK):
+                if not idx:
+                    idx = i
+            elif idx:
+                missing_ranges.append( (idx, i-1) )
+                idx = None
+
+        print missing_ranges
+
+    def sendChunk(self, x = None):
 
         if self.chunk > self.chunk_last:
             print 'EOF :)'
@@ -145,17 +165,18 @@ class CachedRequest(object):
             return
 
         # open first chunk and skip some
-        # fd = open(f.path + os.path.sep + str(chunk_first+1), 'rb')
-        # fd.seek(chunk_offset)
-        fd = open('/home/valodim/space/My Little Pony: Friendship is Magic S01E04 Applebuck Season.mkv', 'rb')
+        # fd = open('/home/valodim/space/My Little Pony: Friendship is Magic S01E04 Applebuck Season.mkv', 'rb')
 
         print "at chunk", self.chunk
 
-        # seek to chunk offset in file, possibly with added offset within the chunk
+        # see if chunk exists
+        path = self.path + os.path.sep + str(self.chunk)
+
+        fd = open(self.path + os.path.sep + str(self.chunk), 'rb')
+
+        # possibly seek to added offset within the first chunk
         if self.chunk == self.chunk_first and self.chunk_offset:
-            fd.seek(self.chunk * self.chunksize + self.chunk_offset)
-        else:
-            fd.seek(self.chunk * self.chunksize)
+            fd.seek(self.chunk_offset)
 
         self.chunk += 1
 
