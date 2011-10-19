@@ -33,8 +33,8 @@ def getUriHEAD(uri, headers):
 
 if __name__ == "__main__":
 
-    d = getUriHEAD(reactor, 'http://www.heise.de', { })
-    # d = getUriHEAD(reactor, 'http://cupcake:81/series/My%20Little%20Pony%3a%20Friendship%20is%20Magic/My%20Little%20Pony%3a%20Friendship%20is%20Magic%20S01E20%20Green%20Isn%27t%20Your%20Color.mkv', { })
+    d = getUriHEAD('http://www.heise.de', { })
+    # d = getUriHEAD('http://cupcake:81/series/My%20Little%20Pony%3a%20Friendship%20is%20Magic/My%20Little%20Pony%3a%20Friendship%20is%20Magic%20S01E20%20Green%20Isn%27t%20Your%20Color.mkv', { })
 
     def printf(x):
         print x
