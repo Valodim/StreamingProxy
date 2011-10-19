@@ -1,10 +1,16 @@
 import urlparse
 import hashlib
+import os
 
 from twisted.internet import reactor, defer
 from twisted.web.proxy import Proxy, ProxyRequest
+from twisted.protocols.basic import FileSender
+
+from zope.interface import implements
 
 from cachedChunk import cachedChunk
+from CacheSender import CacheSender
+
 import utils
 
 class cachedFile(object):
@@ -96,10 +102,7 @@ class cachedFile(object):
             print "not yet implemented - error!"
             return
 
-        if chunk_first not in self.active_chunks:
-            self.active_chunks[chunk_first] = cachedChunk(self, chunk_first)
-
-        self.active_chunks[chunk_first].read(me, (range_from % self.chunksize) if range_from is not None else None)
+        r = CachedRequest(self, me.transport, chunk_first, chunk_last, range_from % self.chunksize if range_from is not None else 0)
 
     def finish(self):
         print "finish."
@@ -110,3 +113,63 @@ class cachedFile(object):
 
         if self.nection is not None:
             self.nection.disconnect()
+
+class CachedRequest(object):
+    """ 
+        This class delivers a specific range of a file to a consumer,
+        taking care of all intermediate caching (at some point :) )
+    """
+
+    chunksize = 10*1024*1024
+
+    def __init__(self, f, consumer, range_from, range_to):
+        self.f = f
+
+        self.chunk_first = range_from / self.chunksize
+        self.chunk_last = range_to / self.chunksize
+        self.chunk_offset = range_from % self.chunksize
+        self.chunk_last_length = range_to % self.chunksize
+
+        # start with first chunk :)
+        self.chunk = self.chunk_first
+
+        self.consumer = consumer
+
+        self.sendChunk(None)
+
+    def sendChunk(self, x):
+
+        if self.chunk > self.chunk_last:
+            print 'EOF :)'
+            self.consumer.loseConnection()
+            return
+
+        # open first chunk and skip some
+        # fd = open(f.path + os.path.sep + str(chunk_first+1), 'rb')
+        # fd.seek(chunk_offset)
+        fd = open('/home/valodim/space/My Little Pony: Friendship is Magic S01E04 Applebuck Season.mkv', 'rb')
+
+        print "at chunk", self.chunk
+
+        # seek to chunk offset in file, possibly with added offset within the chunk
+        if self.chunk == self.chunk_first and self.chunk_offset:
+            fd.seek(self.chunk * self.chunksize + self.chunk_offset)
+        else:
+            fd.seek(self.chunk * self.chunksize)
+
+        self.chunk += 1
+
+        # connect the producer
+        self.producer = CacheSender()
+        if self.chunk_last_length and (self.chunk-1) == self.chunk_last:
+            d = self.producer.beginFileTransfer(fd, self.chunk_last_length, self.consumer)
+        else:
+            d = self.producer.beginFileTransfer(fd, self.chunksize, self.consumer)
+
+        d.addCallback(self.sendChunk)
+
+        def failure(x):
+            x.printTraceback()
+            self.consumer.loseConnection()
+        d.addErrback(failure)
+
