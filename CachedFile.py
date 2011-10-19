@@ -10,8 +10,7 @@ from zope.interface import implements
 
 from CacheClient import CacheClientFactory
 from CacheSender import CacheSender
-
-import utils
+import CacheUtils
 
 class CachedFile(object):
     ports = {"http" : 80}
@@ -54,7 +53,7 @@ class CachedFile(object):
 
         # no info in cache? request it
         if not self.got_info:
-            di = utils.getUriHEAD(self.uri, self.headers)
+            di = CacheUtils.getUriHEAD(self.uri, self.headers)
             di.addCallback(self.handleInfo)
 
             # and once we have it, fire our deferred
