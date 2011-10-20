@@ -8,7 +8,7 @@ class CacheClient(HTTPClient):
 
     fd = None
 
-    def __init__(self, file, host, rest, path, chunk_first, chunk_last, chunksize):
+    def __init__(self, file, host, rest, path, chunk_first, chunk_last, chunksize, direct = None):
 
         self.file = file
 
@@ -22,6 +22,8 @@ class CacheClient(HTTPClient):
         self.chunksize = chunksize
 
         self.chunk = self.chunk_first
+
+        self.direct = direct
 
     def connectionMade(self):
 
@@ -45,6 +47,11 @@ class CacheClient(HTTPClient):
                 return
 
             self.fd = open(self.path + os.path.sep + str(self.chunk), 'wb')
+            if self.direct:
+                r = self.direct.handleDirectChunk(self.chunk)
+                # direct does not want any more direct input? so be it.
+                if not r:
+                    self.direct = None
             print "writing chunk", self.chunk
             self.written = 0
 
@@ -52,19 +59,26 @@ class CacheClient(HTTPClient):
         if write_len > len(data):
             write_len = len(data)
 
+        if self.direct:
+            self.direct.handleDirectChunkData(data[:write_len])
         self.fd.write(data[:write_len])
         self.written += write_len
 
         if self.written == self.chunksize:
             self.file.handleGotChunk(self.chunk)
-            self.chunk += 1
+            if self.direct:
+                self.direct.handleDirectChunkEnd(self.chunk)
             self.fd.close()
             self.fd = None
+            self.chunk += 1
 
             if len(data) > write_len:
                 self.handleResponsePart(data[write_len:])
 
     def handleResponseEnd(self):
+        # notify of this end, just to be sure (redundant is not problematic)
+        if self.direct:
+            self.direct.handleDirectChunkEnd(self.chunk)
         print "response end :)"
 
 class CacheClientFactory(ClientFactory):

@@ -119,11 +119,14 @@ class CachedFile(object):
             if os.access(path, os.F_OK):
                 self.chunks_cached.append( i )
 
+    def isCached(self, chunk):
+        return chunk in self.chunks_cached
+
     def anticipateChunk(self, chunk, *args, **kwargs):
         if chunk not in self.chunks_cached and chunk not in self.chunks_queued:
             self.waitForChunk(chunk, *args, **kwargs)
 
-    def waitForChunk(self, chunk, preload = 5):
+    def waitForChunk(self, chunk, preload = 5, direct = None):
 
         self.cacheUpdate()
 
@@ -164,7 +167,8 @@ class CachedFile(object):
                 self.path,
                 start,
                 end,
-                self.chunksize
+                self.chunksize,
+                direct
             )
         reactor.connectTCP('cupcake', 81, cliFac)
 
@@ -208,6 +212,8 @@ class CachedRequest(object):
 
         self.consumer = consumer
 
+        self.direct_chunk = None
+
         self.d = defer.Deferred()
 
         self.sendChunk()
@@ -219,13 +225,17 @@ class CachedRequest(object):
             self.d.callback(self)
             return
 
+        # are we retrieving directly right now?
+        if self.direct_chunk:
+            return
+
         # this is the file this particular chunk work with
         path = self.file.path + os.path.sep + str(self.chunk)
 
         # see if chunk exists
         if not os.path.isfile(path):
             print "waiting for chunk", self.chunk
-            d = self.file.waitForChunk(self.chunk)
+            d = self.file.waitForChunk(self.chunk, direct=self)
             d.addCallback(self.sendChunk)
             return
 
@@ -261,3 +271,31 @@ class CachedRequest(object):
             self.d.errback(x)
         d.addErrback(failure)
 
+    def handleDirectChunk(self, chunk):
+        # if this is the correct chunk, and is not yet available
+        if self.chunk == chunk and not self.file.isCached(chunk):
+            print 'starting direct passthrough:', chunk
+
+            self.direct_chunk = chunk
+            return True
+        else:
+            return False
+
+    def handleDirectChunkEnd(self, chunk):
+        if self.direct_chunk is None:
+            return
+
+        print 'finished direct passthrough: ', chunk
+
+        if chunk != self.chunk:
+            print 'WTF: wrong end of direct chunk?!', chunk, self.direct_chunk
+
+        self.direct_chunk = None
+        self.chunk += 1
+        pass
+
+    def handleDirectChunkData(self, data):
+        if self.direct_chunk is None:
+            print 'WTF: unrequested direct chunk data?!'
+            return
+        self.consumer.write(data)
