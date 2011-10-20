@@ -112,12 +112,17 @@ class CachedFile(object):
 
         for i in range(0, self.chunks+1):
             # got it?
-            if i in self.chunks_cached:
+            if i in self.chunks_cached or i in self.chunks_queued:
                 continue
 
             path = self.path + os.path.sep + str(i)
             if os.access(path, os.F_OK):
-                self.chunks_cached.append( i )
+                stats = os.stat(path)
+                if stats.st_size != self.chunksize and not (i == self.chunks and stats.st_size == (self.length % self.chunksize) ):
+                    print 'found file with bad size - deleting chunk', i
+                    os.unlink(path)
+                else:
+                    self.chunks_cached.append( i )
 
     def isCached(self, chunk):
         return chunk in self.chunks_cached
