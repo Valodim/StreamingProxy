@@ -28,6 +28,7 @@ class CachedRequest(object):
 
         self.direct_chunk = None
         self.direct_sent = 0
+        self.direct_pause = False
 
         self.d = defer.Deferred()
 
@@ -44,11 +45,8 @@ class CachedRequest(object):
         if self.direct_chunk is not None:
             return
 
-        # this is the file this particular chunk work with
-        path = self.file.path + os.path.sep + str(self.chunk)
-
-        # see if chunk exists
-        if not os.path.isfile(path):
+        # see if the requested chunk exists
+        if not self.file.isCached(self.chunk):
             print "waiting for chunk", self.chunk
             d = self.file.waitForChunk(self.chunk, direct=self)
             d.addCallback(self.sendChunk)
@@ -91,11 +89,14 @@ class CachedRequest(object):
         # if chunk == 0:
             # return False
 
+        if self.direct_pause:
+            return False
+
         if self.chunk > self.chunk_last:
             self.sendChunk()
             return False
 
-        # if this is the correct chunk, and is not yet available
+        # if this is the correct chunk, and is not yet available from cache
         if self.chunk == chunk and not self.file.isCached(chunk):
             print 'starting direct passthrough:', chunk
 
@@ -148,9 +149,23 @@ class CachedRequest(object):
         self.consumer.write(data)
 
     def stopProducing(self):
+        print 'we were asked to stop producing.. very well'
         self.direct_chunk = None
 
     def pauseProducing(self):
+        """
+            We are a streaming producer, so we can send data whenever we want.
+            However, getting a pauseProducing hint means we are ahead of
+            schedule, so we set a switch which will decline direct passthrough
+            at a later point (in favor of cached file data)
+        """
+        self.direct_pause = True
         pass
     def resumeProducing(self):
+        """
+            On the other hand, if we are asked to resume, we might as well keep
+            going with the passthrough :)
+        """
+        print 'resume request?'
+        self.direct_pause = False
         pass
