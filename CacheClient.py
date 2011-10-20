@@ -1,9 +1,8 @@
 import os
+import sys
 
 from twisted.web.http import HTTPClient
 from twisted.internet.protocol import ClientFactory
-
-from cStringIO import StringIO
 
 class CacheClient(HTTPClient):
 
@@ -41,15 +40,13 @@ class CacheClient(HTTPClient):
         # need a new file descriptor?
         if not self.fd:
             if self.chunk > self.chunk_last:
-                print 'wrote the last chunk, got', len(data), 'bytes left? huh.'
-                print data
+                print >> sys.stderr, 'wrote the last chunk, got', len(data), 'bytes left? huh.'
                 self.transport.loseConnection()
                 return
 
             self.fd = open(self.path + os.path.sep + str(self.chunk), 'wb')
             print "writing chunk", self.chunk
             self.written = 0
-            self.chunk += 1
 
         write_len = self.chunksize-self.written
         if write_len > len(data):
@@ -59,6 +56,8 @@ class CacheClient(HTTPClient):
         self.written += write_len
 
         if self.written == self.chunksize:
+            self.file.handleGotChunk(self.chunk)
+            self.chunk += 1
             self.fd.close()
             self.fd = None
 

@@ -13,9 +13,11 @@ from CacheSender import CacheSender
 import CacheUtils
 
 class CachedFile(object):
-    ports = {"http" : 80}
 
-    missing_chunks = None
+    ports = { "http" : 80 }
+
+    missing_chunks = [ ]
+    chunks_waiting = { }
 
     got_info = False
 
@@ -96,42 +98,64 @@ class CachedFile(object):
 
         self.cacheUpdate(chunk_first, chunk_last)
 
-        CachedRequest(self, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length)
-
+        req = CachedRequest(self, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length)
+        # req.d.addCallback()
 
     def cacheUpdate(self, chunk_first, chunk_last):
 
-        if self.missing_chunks is not None:
-            return
-
-        self.missing_chunks = [ ]
-
-        idx = None
-        first_missing = False
-
-        for i in range(chunk_first, chunk_last+1):
+        for i in range(0, self.chunks):
             path = self.path + os.path.sep + str(i)
 
             if not os.access(path, os.F_OK):
-                first_missing = True
-                if not idx:
-                    idx = i
-            elif idx:
-                self.missing_chunks.append( (idx, i-1) )
-                idx = None
+                self.missing_chunks.append( i )
 
-        if self.missing_chunks and (True or first_missing):
-            cliFac = CacheClientFactory(
-                    self,
-                    'cupcake:81',
-                    '/series/My%20Little%20Pony%3a%20Friendship%20is%20Magic/My%20Little%20Pony%3a%20Friendship%20is%20Magic%20S01E04%20Applebuck%20Season.mkv',
-                    self.path,
-                    self.missing_chunks[0][0],
-                    self.missing_chunks[0][1],
-                    self.chunksize
-                )
-            reactor.connectTCP('cupcake', 81, cliFac)
+    def waitForChunk(self, chunk, doPreload = True):
 
+        if chunk not in self.missing_chunks:
+            d = defer.Deferred()
+            d.callback(chunk)
+            return d
+
+        # find all missing, starting from requested
+        start = self.missing_chunks.index(chunk)
+        # preload more chunks (max. 5)
+        if doPreload:
+            end = min(len(self.missing_chunks)-start, start+5)
+            for i in range(1, min(len(self.missing_chunks)-start, 5)):
+                if self.missing_chunks[start+i] != self.missing_chunks[start]+i:
+                    end = start+i-1
+                    break
+        else:
+            end = start
+
+        # initiate wait for chunk
+        cliFac = CacheClientFactory(
+                self,
+                'cupcake:81',
+                '/series/My%20Little%20Pony%3a%20Friendship%20is%20Magic/My%20Little%20Pony%3a%20Friendship%20is%20Magic%20S01E04%20Applebuck%20Season.mkv',
+                self.path,
+                self.missing_chunks[start],
+                self.missing_chunks[end],
+                self.chunksize
+            )
+        reactor.connectTCP('cupcake', 81, cliFac)
+
+        # mark this one as waiting
+        if chunk not in self.chunks_waiting:
+            self.chunks_waiting[chunk] = [ ]
+
+        # and notify once it's done :)
+        d = defer.Deferred()
+        self.chunks_waiting[chunk].append(d)
+        return d
+
+    def handleGotChunk(self, chunk):
+        print 'got chunk: ', chunk
+        del self.missing_chunks[self.missing_chunks.index(chunk)]
+        if chunk in self.chunks_waiting:
+            for w in self.chunks_waiting[chunk]:
+                w.callback(chunk)
+            del self.chunks_waiting[chunk]
 
 class CachedRequest(object):
     """
@@ -152,21 +176,30 @@ class CachedRequest(object):
 
         self.consumer = consumer
 
+        self.d = defer.Deferred()
+
         self.sendChunk()
 
     def sendChunk(self, x = None):
 
         if self.chunk > self.chunk_last:
-            print 'EOF :)'
             self.consumer.loseConnection()
+            self.d.callback(self)
+            return
+
+        # this is the file this particular chunk work with
+        path = self.file.path + os.path.sep + str(self.chunk)
+
+        # see if chunk exists
+        if not os.path.isfile(path):
+            print "waiting for chunk", self.chunk
+            d = self.file.waitForChunk(self.chunk)
+            d.addCallback(self.sendChunk)
             return
 
         print "at chunk", self.chunk
 
-        # see if chunk exists
-        path = self.path + os.path.sep + str(self.chunk)
-
-        fd = open(self.path + os.path.sep + str(self.chunk), 'rb')
+        fd = open(self.file.path + os.path.sep + str(self.chunk), 'rb')
 
         # possibly seek to added offset within the first chunk
         if self.chunk == self.chunk_first and self.chunk_offset:
@@ -186,5 +219,6 @@ class CachedRequest(object):
         def failure(x):
             x.printTraceback()
             self.consumer.loseConnection()
+            self.d.errback(x)
         d.addErrback(failure)
 
