@@ -80,9 +80,10 @@ class CachedFile(object):
 
         self.length = int(headers['content-length'][0])
         self.type = headers['content-type'][0]
-        self.etag = headers['etag'][0]
+        if 'etag' in headers:
+            self.etag = headers['etag'][0]
 
-        self.ranged = headers['accept-ranges'][0] == 'bytes'
+        self.ranged = 'accept-ranges' in headers and headers['accept-ranges'][0] == 'bytes'
 
         # in bytes, so this is 10MB
         self.chunksize = 8*1024*1024
