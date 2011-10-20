@@ -154,7 +154,7 @@ class CachedFile(object):
         else:
             end = start
 
-        self.chunks_queued += list(range(start,end))
+        self.chunks_queued += list(range(start,end+1))
 
         # initiate wait for chunk
         cliFac = CacheClientFactory(
