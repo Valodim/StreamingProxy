@@ -27,9 +27,11 @@ class CachedFile(object):
         """
 
         self.uri = uri
-        self.hash = hashlib.sha1(uri).digest()
+        self.hash = hashlib.sha1(uri).hexdigest()
 
-        self.path = '/home/valodim/space/mlp/'
+        self.path = '/home/valodim/space/mlp/' + self.hash + '/'
+        if not os.access(self.path, os.F_OK):
+            os.mkdir(self.path)
 
         parsed =  urlparse.urlparse(uri)
 
@@ -77,7 +79,7 @@ class CachedFile(object):
         self.ranged = headers['accept-ranges'][0] == 'bytes'
 
         # in bytes, so this is 10MB
-        self.chunksize = 10*1024*1024
+        self.chunksize = 8*1024*1024
         self.chunks = self.length / self.chunksize +1
 
         print "got info. length:", self.length, ', type:', self.type, ', etag:', self.etag, ', accepts range' if self.ranged else ''
@@ -136,8 +138,6 @@ class CachedRequest(object):
         This class delivers a specific range of a file to a consumer,
         taking care of all intermediate caching (at some point :) )
     """
-
-    path = '/home/valodim/space/mlp/'
 
     def __init__(self, file, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length):
         self.file = file
