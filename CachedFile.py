@@ -18,6 +18,8 @@ class CachedFile(object):
 
     # already cached chunks
     chunks_cached = [ ]
+    # queued chunks
+    chunks_queued = [ ]
 
     chunks_waiting = { }
 
@@ -117,7 +119,11 @@ class CachedFile(object):
             if os.access(path, os.F_OK):
                 self.chunks_cached.append( i )
 
-    def waitForChunk(self, chunk, doPreload = True):
+    def anticipateChunk(self, chunk, *args, **kwargs):
+        if chunk not in self.chunks_cached and chunk not in self.chunks_queued:
+            self.waitForChunk(chunk, *args, **kwargs)
+
+    def waitForChunk(self, chunk, preload = 5):
 
         self.cacheUpdate()
 
@@ -126,17 +132,29 @@ class CachedFile(object):
             d.callback(chunk)
             return d
 
+        if chunk in self.chunks_queued:
+            # mark this one as waiting
+            if chunk not in self.chunks_waiting:
+                self.chunks_waiting[chunk] = [ ]
+
+            d = defer.Deferred()
+            self.chunks_waiting[chunk].append(d)
+            return d
+
+
         # find all missing, starting from requested
         start = chunk
         # preload more chunks (max. 5)
-        if doPreload:
-            end = min(start+5, self.chunks)
-            for i in range(start+1, min(start+5, self.chunks)+1):
-                if i in self.chunks_cached:
+        if preload:
+            end = min(start+preload, self.chunks)
+            for i in range(start+1, min(start+preload, self.chunks)+1):
+                if i in self.chunks_cached or i in self.chunks_queued:
                     end = i-1
                     break
         else:
             end = start
+
+        self.chunks_queued += list(range(start,end))
 
         # initiate wait for chunk
         cliFac = CacheClientFactory(
@@ -162,6 +180,10 @@ class CachedFile(object):
     def handleGotChunk(self, chunk):
         print 'got chunk: ', chunk
         self.chunks_cached.append(chunk)
+        if chunk in self.chunks_queued:
+            del self.chunks_queued[self.chunks_queued.index(chunk)]
+        else:
+            print 'debug: got unqueued chunk handle.. should this happen?'
         if chunk in self.chunks_waiting:
             for w in self.chunks_waiting[chunk]:
                 w.callback(chunk)
@@ -208,6 +230,13 @@ class CachedRequest(object):
             return
 
         print "at chunk", self.chunk
+
+        # anticipate the next three chunks
+        if self.chunk+3 < self.chunk_last:
+            self.file.anticipateChunk(self.chunk+3)
+        else:
+            # or possibly just anticipate until our last chunk
+            self.file.anticipateChunk(self.chunk_last)
 
         fd = open(self.file.path + os.path.sep + str(self.chunk), 'rb')
 
