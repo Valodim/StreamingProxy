@@ -16,7 +16,9 @@ class CachedFile(object):
 
     ports = { "http" : 80 }
 
-    cached_chunks = [ ]
+    # already cached chunks
+    chunks_cached = [ ]
+
     chunks_waiting = { }
 
     got_info = False
@@ -108,18 +110,18 @@ class CachedFile(object):
 
         for i in range(0, self.chunks):
             # got it?
-            if i in self.cached_chunks:
+            if i in self.chunks_cached:
                 continue
 
             path = self.path + os.path.sep + str(i)
             if os.access(path, os.F_OK):
-                self.cached_chunks.append( i )
+                self.chunks_cached.append( i )
 
     def waitForChunk(self, chunk, doPreload = True):
 
         self.cacheUpdate()
 
-        if chunk in self.cached_chunks:
+        if chunk in self.chunks_cached:
             d = defer.Deferred()
             d.callback(chunk)
             return d
@@ -130,7 +132,7 @@ class CachedFile(object):
         if doPreload:
             end = min(start+5, self.chunks)
             for i in range(start+1, min(start+6, self.chunks)):
-                if i in self.cached_chunks:
+                if i in self.chunks_cached:
                     end = i-1
                     break
         else:
@@ -159,7 +161,7 @@ class CachedFile(object):
 
     def handleGotChunk(self, chunk):
         print 'got chunk: ', chunk
-        self.cached_chunks.append(chunk)
+        self.chunks_cached.append(chunk)
         if chunk in self.chunks_waiting:
             for w in self.chunks_waiting[chunk]:
                 w.callback(chunk)
