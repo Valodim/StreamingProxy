@@ -52,8 +52,6 @@ class CachedRequest(object):
             d.addCallback(self.sendChunk)
             return
 
-        print "at chunk", self.chunk
-
         # anticipate the next three chunks
         if self.chunk+3 < self.chunk_last:
             self.file.anticipateChunk(self.chunk+3)
@@ -62,6 +60,8 @@ class CachedRequest(object):
             self.file.anticipateChunk(self.chunk_last)
 
         fd = open(self.file.path + os.path.sep + str(self.chunk), 'rb')
+
+        print "sending from cache", self.chunk
 
         # possibly seek to added offset within the first chunk
         if self.chunk == self.chunk_first and self.chunk_offset:
@@ -127,7 +127,7 @@ class CachedRequest(object):
 
     def handleDirectChunkData(self, data):
         if self.direct_chunk is None:
-            print 'WTF: unrequested direct chunk data?!'
+            # print 'WTF: unrequested direct chunk data?!'
             return
 
         # we might have to throw some of it away, if an offset is requested?

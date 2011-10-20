@@ -98,8 +98,6 @@ class CachedFile(object):
         # self.waitForChunk(self.chunks, doPreload=False)
 
     def request(self, consumer, range_from, range_to):
-        print 'got a request from', range_from, range_to
-
         chunk_first = range_from / self.chunksize
         chunk_last = range_to / self.chunksize
         chunk_offset = range_from % self.chunksize
@@ -167,14 +165,14 @@ class CachedFile(object):
         # initiate wait for chunk
         cliFac = CacheClientFactory(
                 self,
-                'cupcake:81',
-                '/series/My%20Little%20Pony%3a%20Friendship%20is%20Magic/My%20Little%20Pony%3a%20Friendship%20is%20Magic%20S01E04%20Applebuck%20Season.mkv',
+                self.host + ( (':'+str(self.port)) if self.port != 80 else '' ),
+                self.rest,
                 self.path,
                 start,
                 end,
                 direct
             )
-        reactor.connectTCP('cupcake', 81, cliFac)
+        reactor.connectTCP(self.host, self.port, cliFac)
 
         # mark this one as waiting
         if chunk not in self.chunks_waiting:
