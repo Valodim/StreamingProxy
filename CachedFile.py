@@ -84,7 +84,7 @@ class CachedFile(object):
 
         # in bytes, so this is 10MB
         self.chunksize = 8*1024*1024
-        self.chunks = self.length / self.chunksize +1
+        self.chunks = self.length / self.chunksize
 
         print "got info. length:", self.length, ', type:', self.type, ', etag:', self.etag, ', accepts range' if self.ranged else ''
         print "chunksize ", self.chunksize, ", using ", self.chunks, "chunks"
@@ -108,7 +108,7 @@ class CachedFile(object):
 
     def cacheUpdate(self):
 
-        for i in range(0, self.chunks):
+        for i in range(0, self.chunks+1):
             # got it?
             if i in self.chunks_cached:
                 continue
@@ -131,7 +131,7 @@ class CachedFile(object):
         # preload more chunks (max. 5)
         if doPreload:
             end = min(start+5, self.chunks)
-            for i in range(start+1, min(start+6, self.chunks)):
+            for i in range(start+1, min(start+5, self.chunks)+1):
                 if i in self.chunks_cached:
                     end = i-1
                     break
