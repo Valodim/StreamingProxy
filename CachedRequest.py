@@ -4,7 +4,6 @@ from twisted.internet import defer
 
 from CacheSender import CacheSender
 
-
 class CachedRequest(object):
     """
         This class delivers a specific range of a file to a consumer,
@@ -99,6 +98,7 @@ class CachedRequest(object):
 
             self.direct_chunk = chunk
             self.direct_sent = 0
+            self.direct_skipped = 0
             return True
         else:
             return False
@@ -107,7 +107,7 @@ class CachedRequest(object):
         if self.direct_chunk is None:
             return
 
-        print 'finished direct passthrough: ', chunk, '- sent', self.direct_sent, 'bytes'
+        print 'finished direct passthrough: ', chunk, '- skipped', self.direct_skipped, 'bytes, sent', self.direct_sent, 'bytes'
 
         if chunk != self.chunk:
             print 'WTF: wrong end of direct chunk?!', chunk, self.direct_chunk
@@ -122,5 +122,20 @@ class CachedRequest(object):
             print 'WTF: unrequested direct chunk data?!'
             return
 
+        # we might have to throw some of it away, if an offset is requested?
+        if self.chunk == self.chunk_first and self.chunk_offset:
+            # if the offset is smaller than what has been processed, just send the data
+            if self.chunk_offset < self.direct_skipped:
+                self.consumer.write(data)
+                self.direct_sent += len(data)
+            # if the offset is in the current batch of data, send the partial buffer
+            elif self.chunk_offset < self.direct_skipped +len(data):
+                self.consumer.write(data[self.chunk_offset-self.direct_skipped:])
+                self.direct_sent += len(data)-(self.chunk_offset-self.direct_skipped)
+            # the else case is just throwing away that data :)
+            self.direct_skipped += len(data)
+            return
+
+        # no offsets, just send the data :)
         self.direct_sent += len(data)
         self.consumer.write(data)
