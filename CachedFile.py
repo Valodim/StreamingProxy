@@ -213,6 +213,7 @@ class CachedRequest(object):
         self.consumer = consumer
 
         self.direct_chunk = None
+        self.direct_sent = 0
 
         self.d = defer.Deferred()
 
@@ -272,11 +273,20 @@ class CachedRequest(object):
         d.addErrback(failure)
 
     def handleDirectChunk(self, chunk):
+        # debug: don't passthrough chunk 0!
+        if chunk == 0:
+            return False
+
+        if self.chunk > self.chunk_last:
+            self.sendChunk()
+            return False
+
         # if this is the correct chunk, and is not yet available
         if self.chunk == chunk and not self.file.isCached(chunk):
             print 'starting direct passthrough:', chunk
 
             self.direct_chunk = chunk
+            self.direct_sent = 0
             return True
         else:
             return False
@@ -285,17 +295,21 @@ class CachedRequest(object):
         if self.direct_chunk is None:
             return
 
-        print 'finished direct passthrough: ', chunk
+        print 'finished direct passthrough: ', chunk, '- sent', self.direct_sent, 'bytes'
 
         if chunk != self.chunk:
             print 'WTF: wrong end of direct chunk?!', chunk, self.direct_chunk
 
         self.direct_chunk = None
         self.chunk += 1
-        pass
+
+        self.sendChunk()
 
     def handleDirectChunkData(self, data):
         if self.direct_chunk is None:
             print 'WTF: unrequested direct chunk data?!'
             return
+
+        self.direct_sent += len(data)
         self.consumer.write(data)
+
