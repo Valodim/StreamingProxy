@@ -68,6 +68,8 @@ class CachedRequest(object):
             fd.seek(self.chunk_offset)
 
         self.chunk += 1
+        # at this point, if it happens to be useful, we may direct connect again
+        self.direct_pause = False
 
         # connect the producer
         self.producer = CacheSender()
