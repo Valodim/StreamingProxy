@@ -8,7 +8,7 @@ class CacheClient(HTTPClient):
 
     fd = None
 
-    def __init__(self, file, host, rest, path, chunk_first, chunk_last, chunksize, direct = None):
+    def __init__(self, file, host, rest, path, chunk_first, chunk_last, direct = None):
 
         self.file = file
 
@@ -19,7 +19,6 @@ class CacheClient(HTTPClient):
 
         self.chunk_first = chunk_first
         self.chunk_last = chunk_last
-        self.chunksize = chunksize
 
         self.chunk = self.chunk_first
 
@@ -30,7 +29,7 @@ class CacheClient(HTTPClient):
         self.sendCommand('GET', self.rest)
 
         self.sendHeader('host', self.host)
-        self.sendHeader('range', 'bytes=%d-%d' % (self.chunk_first*self.chunksize, (self.chunk_last+1)*self.chunksize-1) )
+        self.sendHeader('range', 'bytes=%d-%d' % (self.chunk_first*self.file.chunksize, (self.chunk_last+1)*self.file.chunksize-1) )
         self.sendHeader('connection', 'close')
 
         print 'requesting chunks', self.chunk_first, 'to', self.chunk_last
@@ -55,7 +54,7 @@ class CacheClient(HTTPClient):
             print "writing chunk", self.chunk
             self.written = 0
 
-        write_len = self.chunksize-self.written
+        write_len = self.file.chunksize-self.written
         if write_len > len(data):
             write_len = len(data)
 
@@ -64,7 +63,8 @@ class CacheClient(HTTPClient):
         self.fd.write(data[:write_len])
         self.written += write_len
 
-        if self.written == self.chunksize:
+        if self.written == self.file.chunksize or (self.chunk == self.chunk_last and self.written == (self.file.length % self.file.chunksize) ):
+            print "finished chunk", self.chunk
             self.file.handleGotChunk(self.chunk)
             if self.direct:
                 self.direct.handleDirectChunkEnd(self.chunk)
@@ -74,6 +74,9 @@ class CacheClient(HTTPClient):
 
             if len(data) > write_len:
                 self.handleResponsePart(data[write_len:])
+
+        if self.written > self.file.chunksize:
+            print 'WTF: written > chunksize? should never happen!'
 
     def handleResponseEnd(self):
         # notify of this end, just to be sure (redundant is not problematic)

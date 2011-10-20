@@ -172,7 +172,6 @@ class CachedFile(object):
                 self.path,
                 start,
                 end,
-                self.chunksize,
                 direct
             )
         reactor.connectTCP('cupcake', 81, cliFac)
