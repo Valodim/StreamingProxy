@@ -1,6 +1,7 @@
 import os
 
-from twisted.internet import defer
+from twisted.internet import defer, interfaces
+from zope.interface import implements
 
 from CacheSender import CacheSender
 
@@ -9,6 +10,8 @@ class CachedRequest(object):
         This class delivers a specific range of a file to a consumer,
         taking care of all intermediate caching (at some point :) )
     """
+
+    implements(interfaces.IPushProducer)
 
     def __init__(self, file, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length):
         self.file = file
@@ -38,7 +41,7 @@ class CachedRequest(object):
             return
 
         # are we retrieving directly right now?
-        if self.direct_chunk:
+        if self.direct_chunk is not None:
             return
 
         # this is the file this particular chunk work with
@@ -85,8 +88,8 @@ class CachedRequest(object):
 
     def handleDirectChunk(self, chunk):
         # debug: don't passthrough chunk 0!
-        if chunk == 0:
-            return False
+        # if chunk == 0:
+            # return False
 
         if self.chunk > self.chunk_last:
             self.sendChunk()
@@ -95,6 +98,9 @@ class CachedRequest(object):
         # if this is the correct chunk, and is not yet available
         if self.chunk == chunk and not self.file.isCached(chunk):
             print 'starting direct passthrough:', chunk
+
+            # notify that we'll be producin'
+            self.consumer.registerProducer(self, True)
 
             self.direct_chunk = chunk
             self.direct_sent = 0
@@ -114,6 +120,7 @@ class CachedRequest(object):
 
         self.direct_chunk = None
         self.chunk += 1
+        self.consumer.unregisterProducer()
 
         self.sendChunk()
 
@@ -139,3 +146,11 @@ class CachedRequest(object):
         # no offsets, just send the data :)
         self.direct_sent += len(data)
         self.consumer.write(data)
+
+    def stopProducing(self):
+        self.direct_chunk = None
+
+    def pauseProducing(self):
+        pass
+    def resumeProducing(self):
+        pass
