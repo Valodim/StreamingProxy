@@ -82,6 +82,7 @@ class CacheClient(HTTPClient):
         # notify of this end, just to be sure (redundant is not problematic)
         if self.direct:
             self.direct.handleDirectChunkEnd(self.chunk)
+            self.direct = None
         print "response end :)"
 
 class CacheClientFactory(ClientFactory):

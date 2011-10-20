@@ -76,10 +76,12 @@ class InterceptingProxyRequest(ProxyRequest):
         if self.range_to is None:
             self.range_to = self.file.length
 
-        print "ranged request:", self.range_from, "-", self.range_to, "(", (self.range_to-self.range_from), ")"
+        range_len = self.range_to-self.range_from
+
+        print "ranged request:", self.range_from, "-", self.range_to, "(", (range_len), ")"
 
         self.transport.write("HTTP/1.0 206 Partial Content\r\n")
-        self.transport.write("content-length: %d\r\n" % (self.range_to-self.range_from))
+        self.transport.write("content-length: %d\r\n" % (range_len))
         self.transport.write("content-range: bytes %d-%d/%d\r\n" % (self.range_from,self.range_to,self.file.length))
 
         self.transport.write("content-type: video/x-matroska\r\n")

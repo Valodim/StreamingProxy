@@ -1,9 +1,10 @@
 import os
 
-from twisted.internet import defer, interfaces
+from twisted.internet import defer, interfaces, reactor
 from zope.interface import implements
 
 from CacheSender import CacheSender
+from UncachedClient import UncachedClientFactory
 
 class CachedRequest(object):
     """
@@ -163,6 +164,7 @@ class CachedRequest(object):
         """
         self.direct_pause = True
         pass
+
     def resumeProducing(self):
         """
             On the other hand, if we are asked to resume, we might as well keep
@@ -171,3 +173,42 @@ class CachedRequest(object):
         print 'resume request?'
         self.direct_pause = False
         pass
+
+class UncachedRequest(CachedRequest):
+
+    def __init__(self, file, consumer, range_from, range_to):
+
+        self.file = file
+
+        self.range_from = range_from
+        self.range_to = range_to
+
+        self.consumer = consumer
+
+        self.d = defer.Deferred()
+
+        self.sendChunk()
+
+    def sendChunk(self, x = None):
+        print "initiating uncached request,", self.range_from, '-', self.range_to
+
+        # initiate wait for chunk
+        cliFac = UncachedClientFactory(
+                self.file.host + ( (':'+str(self.file.port)) if self.file.port != 80 else '' ),
+                self.file.rest,
+                self.range_from,
+                self.range_to,
+                self
+            )
+        reactor.connectTCP(self.file.host, self.file.port, cliFac)
+
+    def handleDirectChunk(self, chunk):
+        self.consumer.registerProducer(self, True)
+
+    def handleDirectChunkData(self, data):
+        self.consumer.write(data)
+
+    def handleDirectChunkEnd(self, chunk):
+        self.consumer.unregisterProducer()
+        self.consumer.loseConnection()
+        # self.d.callback(None)

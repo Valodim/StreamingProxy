@@ -9,7 +9,7 @@ from twisted.protocols.basic import FileSender
 from zope.interface import implements
 
 from CacheClient import CacheClientFactory
-from CachedRequest import CachedRequest
+from CachedRequest import CachedRequest, UncachedRequest
 import CacheUtils
 
 class CachedFile(object):
@@ -98,6 +98,11 @@ class CachedFile(object):
         # self.waitForChunk(self.chunks, doPreload=False)
 
     def request(self, consumer, range_from, range_to):
+        # if this is a small request (< 100kb), don't do any caching
+        if range_to-range_from < 100*1024:
+            req = UncachedRequest(self, consumer, range_from, range_to)
+            return
+
         chunk_first = range_from / self.chunksize
         chunk_last = range_to / self.chunksize
         chunk_offset = range_from % self.chunksize
