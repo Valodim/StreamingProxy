@@ -97,12 +97,7 @@ class CachedRequest(object):
             d = self.producer.beginFileTransfer(fd, self.file.chunksize, self.consumer)
 
         d.addCallback(self.sendChunk)
-
-        def failure(x):
-            x.printTraceback()
-            self.consumer.loseConnection()
-            self.d.errback(x)
-        d.addErrback(failure)
+        d.addErrback(self.stopProducing)
 
     def handleDirectChunk(self, chunk):
         # debug: don't passthrough chunk 0!
@@ -204,7 +199,7 @@ class CachedRequest(object):
             self.direct_handled += len(buf)
 
 
-    def stopProducing(self):
+    def stopProducing(self, err = None):
         print 'we were asked to stop producing.. very well'
         self.direct_chunk = None
 

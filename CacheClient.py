@@ -43,6 +43,20 @@ class CacheClient(HTTPClient):
 
     def handleResponsePart(self, data):
 
+        # is this request stale (ie, no longer queued)?
+        if not self.file.isQueued(self.chunk):
+            print 'dropping download of stale chunk', self.chunk
+
+            # notify of this end, just to be sure (redundant is not problematic)
+            if self.directs:
+                for direct in self.directs:
+                    direct.handleDirectChunkEnd(self.chunk)
+                self.directs = [ ]
+
+            self.file.handleGotChunk(self.chunk, True)
+            self.transport.loseConnection()
+            return
+
         # need a new file descriptor?
         if not self.fd:
             if self.chunk > self.chunk_last:
@@ -101,7 +115,7 @@ class CacheClient(HTTPClient):
         if self.directs:
             for direct in self.directs:
                 direct.handleDirectChunkEnd(self.chunk)
-            del self.directs[self.directs.index(direct)]
+            self.directs = [ ]
         print "response end :)"
 
     def registerConsumer(self, direct):

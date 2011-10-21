@@ -129,6 +129,9 @@ class CachedFile(object):
                 else:
                     self.chunks_cached.append( i )
 
+    def isQueued(self, chunk):
+        return chunk in self.chunks_queued
+
     def isCached(self, chunk):
         return chunk in self.chunks_cached
 
@@ -163,7 +166,7 @@ class CachedFile(object):
             return d
 
         # if we got this far, there is no cache and no loading whatsoever on this chunk!
-        if passthrough:
+        if not passthrough:
             print 'WTF: passthrough block at a non-queued request...'
 
         # find all missing, starting from requested
@@ -215,9 +218,8 @@ class CachedFile(object):
                 w.callback(producer)
             del self.chunks_waiting[chunk]
 
-    def handleGotChunk(self, chunk):
-        print 'finished caching chunk: ', chunk
-        self.chunks_cached.append(chunk)
+    def handleGotChunk(self, chunk, partial=False):
+
         if chunk in self.chunks_queued:
             del self.chunks_queued[self.chunks_queued.index(chunk)]
         else:
@@ -227,6 +229,16 @@ class CachedFile(object):
             del self.chunks_active[chunk]
         else:
             print 'debug: got unactive chunk handle.. should this happen?'
+
+        if partial:
+            if chunk in self.chunks_waiting:
+                print 'debug: got a partial for a chunk still being waited for?'
+
+            print 'finished caching chunk partially: ', chunk
+            return
+
+        print 'finished caching chunk: ', chunk
+        self.chunks_cached.append(chunk)
 
         if chunk in self.chunks_waiting:
             for w in self.chunks_waiting[chunk]:
