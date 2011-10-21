@@ -20,14 +20,16 @@ def getUriHEAD(uri, headers):
     if 'host' not in headers:
         headers['host'] = host
 
-    clientFactory = HTTPClientFactory(uri, 'HEAD', headers=headers)
+    clientFactory = HTTPClientFactory(uri, 'HEAD', headers=headers, timeout=3)
     reactor.connectTCP(host, port, clientFactory)
 
     d = defer.Deferred()
+
     def cb(_):
         d.callback(clientFactory.response_headers)
-
     clientFactory.deferred.addCallback(cb)
+
+    clientFactory.deferred.addErrback(d.errback)
 
     return d
 

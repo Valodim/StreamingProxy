@@ -60,21 +60,16 @@ class CachedFile(object):
 
     def getInfo(self):
 
-        d = defer.Deferred()
-
-        # no info in cache? request it
-        if not self.got_info:
-            di = CacheUtils.getUriHEAD(self.uri, self.headers)
-            di.addCallback(self.handleInfo)
-
-            # and once we have it, fire our deferred
-            def cb(x):
-                d.callback(self)
-            di.addCallback(cb)
+        if self.got_info:
+            d = defer.Deferred()
+            d.callback(self)
             return d
 
-        # the info is available - report success right away
-        d.callback(self)
+        # no info in cache? request it
+        d = CacheUtils.getUriHEAD(self.uri, self.headers)
+        d.addCallback(self.handleInfo)
+
+        # and once we have it, fire our deferred
         return d
 
 

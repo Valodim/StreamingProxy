@@ -50,6 +50,8 @@ class InterceptingProxyRequest(ProxyRequest):
         if x:
             x.printTraceback()
 
+        print >> sys.stderr, 'Could not retrieve info'
+
         self.transport.write("HTTP/1.0 501 Gateway Error\r\n")
         self.transport.write("connection: close\r\n")
 
