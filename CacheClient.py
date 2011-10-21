@@ -25,6 +25,7 @@ class CacheClient(HTTPClient):
         self.chunk = self.chunk_first
 
         self.chunk_buffer = StringIO()
+        self.written = 0
 
         self.directs = [ ]
 
@@ -61,29 +62,31 @@ class CacheClient(HTTPClient):
         if write_len > len(data):
             write_len = len(data)
 
-        # send data to direct receivers
-        if self.directs:
-            for direct in self.directs:
-                direct.handleDirectChunkData(data[:write_len], self.written)
         # write to file (we are primarily a cache, after all)
         self.fd.write(data[:write_len])
         # buffer for later joining of direct consumers
         self.chunk_buffer.write(data[:write_len])
         self.written += write_len
 
+        # send data to direct receivers
+        if self.directs:
+            for direct in self.directs:
+                direct.handleDirectChunkData(self.chunk_buffer, self.written)
+
         if self.written == self.file.chunksize or (self.chunk == self.chunk_last and self.written == (self.file.length % self.file.chunksize) ):
             print "finished chunk", self.chunk
-            if self.directs:
-                for direct in self.directs:
-                    direct.handleDirectChunkEnd(self.chunk)
-                self.directs = [ ]
+
+            self.file.handleGotChunk(self.chunk)
 
             self.fd.close()
             self.fd = None
             self.chunk_buffer.close()
             self.chunk_buffer = None
 
-            self.file.handleGotChunk(self.chunk)
+            if self.directs:
+                for direct in self.directs:
+                    direct.handleDirectChunkEnd(self.chunk)
+                self.directs = [ ]
 
             self.chunk += 1
 
@@ -117,7 +120,7 @@ class CacheClient(HTTPClient):
 
         # send what we have so far (the consumer takes care of offset himself!)
         if self.chunk_buffer:
-            direct.handleDirectChunkData(self.chunk_buffer.getvalue(), 0)
+            direct.handleDirectChunkData(self.chunk_buffer, self.written)
 
 class CacheClientFactory(ClientFactory):
     protocol = CacheClient

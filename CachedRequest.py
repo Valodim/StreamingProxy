@@ -28,8 +28,10 @@ class CachedRequest(object):
         self.consumer = consumer
 
         self.direct_chunk = None
-        self.direct_sent = 0
         self.direct_pause = False
+
+        # at the first chunk, we can already mark the offset as handled
+        self.direct_handled = chunk_offset
 
         self.d = defer.Deferred()
 
@@ -76,14 +78,15 @@ class CachedRequest(object):
 
         fd = open(self.file.path + os.path.sep + str(self.chunk), 'rb')
 
-        print "sending from cache", self.chunk
+        print "sending from cache", self.chunk, 'offset ', self.direct_handled
 
         # possibly seek to added offset within the first chunk
-        if self.chunk == self.chunk_first and self.chunk_offset:
-            fd.seek(self.chunk_offset)
+        if self.direct_handled > 0:
+            fd.seek(self.direct_handled)
 
+        # advance chunk by one, reset runtime vars
         self.chunk += 1
-        # at this point, if it happens to be useful, we may direct connect again
+        self.direct_handled = 0
         self.direct_pause = False
 
         # connect the producer
@@ -131,46 +134,75 @@ class CachedRequest(object):
         self.consumer.registerProducer(self, True)
 
         self.direct_chunk = chunk
-        self.direct_sent = 0
         return True
 
     def handleDirectChunkEnd(self, chunk):
         if self.direct_chunk is None:
             return
 
-        print 'finished direct passthrough: ', chunk, ', sent', self.direct_sent, 'bytes'
+        print 'finished direct passthrough: ', chunk, ', handled', self.direct_handled, 'bytes'
 
         if chunk != self.chunk:
             print 'WTF: wrong end of direct chunk?!', chunk, self.direct_chunk
 
+        # we no longer produce ourselves
         self.direct_chunk = None
-        self.chunk += 1
         self.consumer.unregisterProducer()
 
+        # did we get the entire chunk? if so, mark it as done
+        if self.direct_handled == self.file.chunksize:
+            self.direct_handled = 0
+            self.chunk += 1
+
+        # and continue looking for further data, should we need it
         self.sendChunk()
 
-    def handleDirectChunkData(self, data, offset):
+    def handleDirectChunkData(self, data, limit):
+        """
+            This method expects a File handle (most likely StringIO) to work
+            with. It will determine whether or not to send data depending on
+            its paused option, and handle offsets accordingly.
+
+            The file handle is expected to handle seek().
+
+            The limit parameter indicates up to what point the buffer is filled,
+            and will be reset to if any seek()ing is done.
+        """
+
         if self.direct_chunk is None:
+            # this is a TODO, and depends in the handling of aborted requests!
             print 'WTF: unrequested direct chunk data?!'
             return
 
-        # print 'got direct from offset', offset
+        # if we are paused (maybe add an additional condition for this?)
+        if self.direct_pause:
+            # we are not supposed to send any data right now, so skip this one
 
-        # we might have to throw some of it away, if an offset is requested?
-        if self.chunk == self.chunk_first and self.chunk_offset:
-            # if the offset is smaller than what has been processed, just send the data
-            if self.chunk_offset < offset:
-                self.consumer.write(data)
-                self.direct_sent += len(data)
-            # if the offset is in the current batch of data, send the partial buffer
-            elif self.chunk_offset < offset +len(data):
-                self.consumer.write(data[self.chunk_offset-offset:])
-                self.direct_sent += len(data)-(self.chunk_offset-offset)
+            # this means that the data needs to be sent at a later point, which
+            # will happen either in this method if resumeProducing() is called
+            # in the meantime, or after we got a handleDirectChunkEnd() and we
+            # read from the file, using direct_handled as an added offset.
+
             return
 
-        # no offsets, just send the data :)
-        self.consumer.write(data)
-        self.direct_sent += len(data)
+        # TODO, debug check, gonna this later!
+        if self.chunk == self.chunk_first and self.chunk_offset and self.direct_handled < self.chunk_offset:
+            print 'WTF: direct_handled < chunk_offset?'
+            self.direct_handled = self.chunk_offset
+
+            return
+
+        # any new data?
+        if limit > self.direct_handled:
+            # seek to the new data offset
+            data.seek(self.direct_handled)
+            # read it
+            buf = data.read()
+            # forward it
+            self.consumer.write(buf)
+            # and take note of the handled range
+            self.direct_handled += len(buf)
+
 
     def stopProducing(self):
         print 'we were asked to stop producing.. very well'
@@ -183,17 +215,20 @@ class CachedRequest(object):
             schedule, so we set a switch which will decline direct passthrough
             at a later point (in favor of cached file data)
         """
-        self.direct_pause = True
-        pass
+        if not self.direct_pause:
+            print 'pause request?'
+            self.direct_pause = True
+            # reactor.callLater(5, self.resumeProducing)
 
     def resumeProducing(self):
         """
             On the other hand, if we are asked to resume, we might as well keep
             going with the passthrough :)
         """
-        print 'resume request?'
-        self.direct_pause = False
-        pass
+        if self.direct_pause:
+            print 'resume request?'
+            self.direct_pause = False
+            # self.sendChunk()
 
 class UncachedRequest(CachedRequest):
 
