@@ -48,15 +48,22 @@ class CachedRequest(object):
         if self.direct_chunk is not None:
             return
 
-        # being offered a producer?
-        if producer is not None:
-            producer.registerConsumer(self)
-            return
-
         # see if the requested chunk exists
         if not self.file.isCached(self.chunk):
+
+            # being offered a producer?
+            if producer is not None:
+                # not right now... maybe later? just try again some time.
+                if self.direct_pause:
+                    reactor.callLater(2, self.sendChunk)
+                    return
+
+                producer.registerConsumer(self)
+                return
+
             print "waiting for chunk", self.chunk
-            d = self.file.waitForChunk(self.chunk)
+            # this one's off for now, still debugging that
+            d = self.file.waitForChunk(self.chunk)#, passthrough=(not self.direct_pause) )
             d.addCallback(self.sendChunk)
             return
 
@@ -105,6 +112,7 @@ class CachedRequest(object):
 
         if self.direct_pause:
             print 'turning down direct stream, pause indicates we can wait'
+            self.sendChunk()
             return False
 
         if self.chunk > self.chunk_last:

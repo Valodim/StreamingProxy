@@ -1,6 +1,7 @@
 import urlparse
 import hashlib
 import os
+import sys
 
 from twisted.internet import reactor, defer
 from twisted.web.proxy import Proxy, ProxyRequest
@@ -137,33 +138,38 @@ class CachedFile(object):
         return chunk in self.chunks_cached
 
     def anticipateChunk(self, chunk, *args, **kwargs):
-        if chunk not in self.chunks_cached and chunk not in self.chunks_queued:
+        if chunk not in self.chunks_cached and chunk not in self.chunks_queued and chunk not in self.chunks_active:
             self.waitForChunk(chunk, *args, **kwargs)
 
-    def waitForChunk(self, chunk, preload = 5):
+    def waitForChunk(self, chunk, preload = 5, passthrough=True):
 
-        self.cacheUpdate()
-
+        # it's already there? this shouldn't happen..
         if chunk in self.chunks_cached:
+            print >> sys.stderr, 'WTF: waitForChunk called on cached chunk?'
             d = defer.Deferred()
             d.callback(None)
             return d
 
-        # it's in progress, tell them about it :)
-        print 'reactive, here\'s some info:', self.chunks_active
-        if chunk in self.chunks_active:
+        # it's in progress - tell them about it :)
+        if chunk in self.chunks_active and passthrough:
             d = defer.Deferred()
+            # they might get a passthrough conection from this reference yet
             d.callback(self.chunks_active[chunk])
             return d
 
+        # it's queued - but notify once this one is done
         if chunk in self.chunks_queued:
-            # mark this one as waiting
+            # mark this one as waiting (for another chance to get passthrough at a later point)
             if chunk not in self.chunks_waiting:
                 self.chunks_waiting[chunk] = [ ]
 
             d = defer.Deferred()
             self.chunks_waiting[chunk].append(d)
             return d
+
+        # if we got this far, there is no cache and no loading whatsoever on this chunk!
+        if passthrough:
+            print 'WTF: passthrough block at a non-queued request...'
 
         # find all missing, starting from requested
         start = chunk

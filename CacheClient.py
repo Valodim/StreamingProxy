@@ -116,7 +116,8 @@ class CacheClient(HTTPClient):
         self.directs.append(direct)
 
         # send what we have so far (the consumer takes care of offset himself!)
-        direct.handleDirectChunkData(self.chunk_buffer.getvalue(), 0)
+        if self.chunk_buffer:
+            direct.handleDirectChunkData(self.chunk_buffer.getvalue(), 0)
 
 class CacheClientFactory(ClientFactory):
     protocol = CacheClient
