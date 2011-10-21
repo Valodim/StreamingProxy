@@ -35,7 +35,9 @@ class CachedRequest(object):
 
         self.sendChunk()
 
-    def sendChunk(self, x = None):
+    def sendChunk(self, producer = None):
+
+        print 'sendchunk', self
 
         if self.chunk > self.chunk_last:
             self.consumer.loseConnection()
@@ -46,10 +48,15 @@ class CachedRequest(object):
         if self.direct_chunk is not None:
             return
 
+        # being offered a producer?
+        if producer is not None:
+            producer.registerConsumer(self)
+            return
+
         # see if the requested chunk exists
         if not self.file.isCached(self.chunk):
             print "waiting for chunk", self.chunk
-            d = self.file.waitForChunk(self.chunk, direct=self)
+            d = self.file.waitForChunk(self.chunk)
             d.addCallback(self.sendChunk)
             return
 
@@ -92,32 +99,38 @@ class CachedRequest(object):
         # if chunk == 0:
             # return False
 
+        if self.chunk != chunk:
+            print 'WTF: turning down direct stream, wrong chunk?!'
+            return False
+
         if self.direct_pause:
+            print 'turning down direct stream, pause indicates we can wait'
             return False
 
         if self.chunk > self.chunk_last:
+            print 'turning down direct stream, we are past our chunk'
             self.sendChunk()
             return False
 
         # if this is the correct chunk, and is not yet available from cache
-        if self.chunk == chunk and not self.file.isCached(chunk):
-            print 'starting direct passthrough:', chunk
-
-            # notify that we'll be producin'
-            self.consumer.registerProducer(self, True)
-
-            self.direct_chunk = chunk
-            self.direct_sent = 0
-            self.direct_skipped = 0
-            return True
-        else:
+        if self.file.isCached(chunk):
+            print 'turning down direct stream, it\'s already cached (should this happen?)'
             return False
+
+        print 'starting direct passthrough:', chunk
+
+        # notify that we'll be producin'
+        self.consumer.registerProducer(self, True)
+
+        self.direct_chunk = chunk
+        self.direct_sent = 0
+        return True
 
     def handleDirectChunkEnd(self, chunk):
         if self.direct_chunk is None:
             return
 
-        print 'finished direct passthrough: ', chunk, '- skipped', self.direct_skipped, 'bytes, sent', self.direct_sent, 'bytes'
+        print 'finished direct passthrough: ', chunk, ', sent', self.direct_sent, 'bytes'
 
         if chunk != self.chunk:
             print 'WTF: wrong end of direct chunk?!', chunk, self.direct_chunk
@@ -128,28 +141,28 @@ class CachedRequest(object):
 
         self.sendChunk()
 
-    def handleDirectChunkData(self, data):
+    def handleDirectChunkData(self, data, offset):
         if self.direct_chunk is None:
-            # print 'WTF: unrequested direct chunk data?!'
+            print 'WTF: unrequested direct chunk data?!'
             return
+
+        # print 'got direct from offset', offset
 
         # we might have to throw some of it away, if an offset is requested?
         if self.chunk == self.chunk_first and self.chunk_offset:
             # if the offset is smaller than what has been processed, just send the data
-            if self.chunk_offset < self.direct_skipped:
+            if self.chunk_offset < offset:
                 self.consumer.write(data)
                 self.direct_sent += len(data)
             # if the offset is in the current batch of data, send the partial buffer
-            elif self.chunk_offset < self.direct_skipped +len(data):
-                self.consumer.write(data[self.chunk_offset-self.direct_skipped:])
-                self.direct_sent += len(data)-(self.chunk_offset-self.direct_skipped)
-            # the else case is just throwing away that data :)
-            self.direct_skipped += len(data)
+            elif self.chunk_offset < offset +len(data):
+                self.consumer.write(data[self.chunk_offset-offset:])
+                self.direct_sent += len(data)-(self.chunk_offset-offset)
             return
 
         # no offsets, just send the data :)
-        self.direct_sent += len(data)
         self.consumer.write(data)
+        self.direct_sent += len(data)
 
     def stopProducing(self):
         print 'we were asked to stop producing.. very well'
@@ -205,7 +218,7 @@ class UncachedRequest(CachedRequest):
     def handleDirectChunk(self, chunk):
         self.consumer.registerProducer(self, True)
 
-    def handleDirectChunkData(self, data):
+    def handleDirectChunkData(self, data, offset):
         self.consumer.write(data)
 
     def handleDirectChunkEnd(self, chunk):

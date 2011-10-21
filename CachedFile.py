@@ -20,6 +20,8 @@ class CachedFile(object):
     chunks_cached = [ ]
     # queued chunks
     chunks_queued = [ ]
+    # active chunks
+    chunks_active = { }
 
     chunks_waiting = { }
 
@@ -138,13 +140,20 @@ class CachedFile(object):
         if chunk not in self.chunks_cached and chunk not in self.chunks_queued:
             self.waitForChunk(chunk, *args, **kwargs)
 
-    def waitForChunk(self, chunk, preload = 5, direct = None):
+    def waitForChunk(self, chunk, preload = 5):
 
         self.cacheUpdate()
 
         if chunk in self.chunks_cached:
             d = defer.Deferred()
-            d.callback(chunk)
+            d.callback(None)
+            return d
+
+        # it's in progress, tell them about it :)
+        print 'reactive, here\'s some info:', self.chunks_active
+        if chunk in self.chunks_active:
+            d = defer.Deferred()
+            d.callback(self.chunks_active[chunk])
             return d
 
         if chunk in self.chunks_queued:
@@ -155,7 +164,6 @@ class CachedFile(object):
             d = defer.Deferred()
             self.chunks_waiting[chunk].append(d)
             return d
-
 
         # find all missing, starting from requested
         start = chunk
@@ -178,8 +186,7 @@ class CachedFile(object):
                 self.rest,
                 self.path,
                 start,
-                end,
-                direct
+                end
             )
         reactor.connectTCP(self.host, self.port, cliFac)
 
@@ -192,14 +199,35 @@ class CachedFile(object):
         self.chunks_waiting[chunk].append(d)
         return d
 
+    def handleActiveChunk(self, chunk, producer):
+        print 'active chunk: ', chunk
+
+        if chunk in self.chunks_active:
+            print 'WTF: got a second producer for a chunk?!'
+
+        self.chunks_active[chunk] = producer
+
+        # do we have any waiting for this particular chunk?
+        if chunk in self.chunks_waiting and self.chunks_waiting[chunk]:
+            for w in self.chunks_waiting[chunk]:
+                print 'notifying a waiting, active'
+                w.callback(producer)
+            del self.chunks_waiting[chunk]
+
     def handleGotChunk(self, chunk):
-        print 'got chunk: ', chunk
+        print 'finished caching chunk: ', chunk
         self.chunks_cached.append(chunk)
         if chunk in self.chunks_queued:
             del self.chunks_queued[self.chunks_queued.index(chunk)]
         else:
             print 'debug: got unqueued chunk handle.. should this happen?'
+
+        if chunk in self.chunks_active:
+            del self.chunks_active[chunk]
+        else:
+            print 'debug: got unactive chunk handle.. should this happen?'
+
         if chunk in self.chunks_waiting:
             for w in self.chunks_waiting[chunk]:
-                w.callback(chunk)
+                w.callback(None)
             del self.chunks_waiting[chunk]

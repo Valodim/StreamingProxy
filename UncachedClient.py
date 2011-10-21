@@ -29,7 +29,7 @@ class UncachedClient(HTTPClient):
         r = self.direct.handleDirectChunk(None)
 
     def handleResponsePart(self, data):
-        self.direct.handleDirectChunkData(data)
+        self.direct.handleDirectChunkData(data, self.written)
         self.written += len(data)
 
     def handleResponseEnd(self):

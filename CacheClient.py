@@ -1,6 +1,8 @@
 import os
 import sys
 
+from StringIO import StringIO
+
 from twisted.web.http import HTTPClient
 from twisted.internet.protocol import ClientFactory
 
@@ -8,7 +10,7 @@ class CacheClient(HTTPClient):
 
     fd = None
 
-    def __init__(self, file, host, rest, path, chunk_first, chunk_last, direct = None):
+    def __init__(self, file, host, rest, path, chunk_first, chunk_last):
 
         self.file = file
 
@@ -22,7 +24,9 @@ class CacheClient(HTTPClient):
 
         self.chunk = self.chunk_first
 
-        self.direct = direct
+        self.chunk_buffer = StringIO()
+
+        self.directs = [ ]
 
     def connectionMade(self):
 
@@ -45,31 +49,42 @@ class CacheClient(HTTPClient):
                 self.transport.loseConnection()
                 return
 
+            # prepare file handle and direct passthrough
             self.fd = open(self.path + os.path.sep + str(self.chunk), 'wb')
-            if self.direct:
-                r = self.direct.handleDirectChunk(self.chunk)
-                # direct does not want any more direct input? so be it.
-                if not r:
-                    self.direct = None
+            self.file.handleActiveChunk(self.chunk, self)
+
             print "writing chunk", self.chunk
             self.written = 0
+            self.chunk_buffer = StringIO()
 
         write_len = self.file.chunksize-self.written
         if write_len > len(data):
             write_len = len(data)
 
-        if self.direct:
-            self.direct.handleDirectChunkData(data[:write_len])
+        # send data to direct receivers
+        if self.directs:
+            for direct in self.directs:
+                direct.handleDirectChunkData(data[:write_len], self.written)
+        # write to file (we are primarily a cache, after all)
         self.fd.write(data[:write_len])
+        # buffer for later joining of direct consumers
+        self.chunk_buffer.write(data[:write_len])
         self.written += write_len
 
         if self.written == self.file.chunksize or (self.chunk == self.chunk_last and self.written == (self.file.length % self.file.chunksize) ):
             print "finished chunk", self.chunk
-            self.file.handleGotChunk(self.chunk)
-            if self.direct:
-                self.direct.handleDirectChunkEnd(self.chunk)
+            if self.directs:
+                for direct in self.directs:
+                    direct.handleDirectChunkEnd(self.chunk)
+                self.directs = [ ]
+
             self.fd.close()
             self.fd = None
+            self.chunk_buffer.close()
+            self.chunk_buffer = None
+
+            self.file.handleGotChunk(self.chunk)
+
             self.chunk += 1
 
             if len(data) > write_len:
@@ -80,10 +95,28 @@ class CacheClient(HTTPClient):
 
     def handleResponseEnd(self):
         # notify of this end, just to be sure (redundant is not problematic)
-        if self.direct:
-            self.direct.handleDirectChunkEnd(self.chunk)
-            self.direct = None
+        if self.directs:
+            for direct in self.directs:
+                direct.handleDirectChunkEnd(self.chunk)
+            del self.directs[self.directs.index(direct)]
         print "response end :)"
+
+    def registerConsumer(self, direct):
+        # just a sanity check
+        if direct in self.directs:
+            print >> sys.stderr, 'WTF: duplicate direct consumer registration'
+            return
+
+        # say we're here to supply
+        r = direct.handleDirectChunk(self.chunk)
+        if not r:
+            return
+
+        # make a note for later
+        self.directs.append(direct)
+
+        # send what we have so far (the consumer takes care of offset himself!)
+        direct.handleDirectChunkData(self.chunk_buffer.getvalue(), 0)
 
 class CacheClientFactory(ClientFactory):
     protocol = CacheClient
