@@ -33,11 +33,12 @@ class UncachedClient(HTTPClient):
         self.written += len(data)
 
     def handleResponseEnd(self):
+        print "uncached response end,", self.written, " bytes total"
+
         if self.direct:
             # notify of this end, just to be sure (redundant is not problematic)
             self.direct.handleDirectChunkEnd(None)
             self.direct = None
-            print "uncached response end,", self.written, " bytes total"
 
 class UncachedClientFactory(ClientFactory):
     protocol = UncachedClient

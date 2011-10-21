@@ -105,13 +105,14 @@ class CachedFile(object):
             # also, if it is not completely cached
             if not (chunk_first in self.chunks_cached and chunk_last in self.chunks_cached):
                 req = UncachedRequest(self, consumer, range_from, range_to)
+                req.d.addCallback(consumer.loseConnection)
                 return
 
         chunk_offset = range_from % self.chunksize
         chunk_last_length = range_to % self.chunksize
 
         req = CachedRequest(self, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length)
-        # req.d.addCallback()
+        req.d.addCallback(consumer.loseConnection)
 
     def cacheUpdate(self):
 

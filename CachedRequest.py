@@ -14,6 +14,11 @@ class CachedRequest(object):
 
     implements(interfaces.IPushProducer)
 
+    direct_chunk = None
+    direct_pause = False
+
+    direct_handled = 0
+
     def __init__(self, file, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length):
         self.file = file
 
@@ -27,9 +32,6 @@ class CachedRequest(object):
 
         self.consumer = consumer
 
-        self.direct_chunk = None
-        self.direct_pause = False
-
         # at the first chunk, we can already mark the offset as handled
         self.direct_handled = chunk_offset
 
@@ -42,7 +44,6 @@ class CachedRequest(object):
         print 'sendchunk', self
 
         if self.chunk > self.chunk_last:
-            self.consumer.loseConnection()
             self.d.callback(self)
             return
 
@@ -166,7 +167,7 @@ class CachedRequest(object):
 
         if self.direct_chunk is None:
             # this is a TODO, and depends in the handling of aborted requests!
-            print 'WTF: unrequested direct chunk data?!'
+            # print 'WTF: unrequested direct chunk data?!'
             return
 
         # if we are paused (maybe add an additional condition for this?)
@@ -261,5 +262,4 @@ class UncachedRequest(CachedRequest):
 
     def handleDirectChunkEnd(self, chunk):
         self.consumer.unregisterProducer()
-        self.consumer.loseConnection()
-        # self.d.callback(None)
+        self.d.callback(None)
