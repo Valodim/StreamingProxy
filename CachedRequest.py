@@ -41,7 +41,7 @@ class CachedRequest(object):
 
     def sendChunk(self, producer = None):
 
-        print 'sendchunk', self
+        # print 'sendchunk', self
 
         if self.chunk > self.chunk_last:
             self.d.callback(self)
@@ -65,8 +65,15 @@ class CachedRequest(object):
                 return
 
             print "waiting for chunk", self.chunk
-            # this one's off for now, still debugging that
-            d = self.file.waitForChunk(self.chunk)#, passthrough=(not self.direct_pause) )
+            # is the offset more than 20% of a chunksize?
+            if self.chunk == self.chunk_first and self.direct_handled > 0.2 * self.file.chunksize:
+                # work with a partial (uncached!) chunk, then.  if we don't do
+                # this, we get a delay of (chunksize-offset)/transferspeed
+                # before we get any useful data!
+                d = self.file.waitForChunk(self.chunk, offset=self.direct_handled)
+            else:
+                # passthrough block is off for now, not sure if that is needed anymore
+                d = self.file.waitForChunk(self.chunk) #, passthrough=(not self.direct_pause) )
             d.addCallback(self.sendChunk)
             return
 
@@ -100,7 +107,7 @@ class CachedRequest(object):
         d.addCallback(self.sendChunk)
         d.addErrback(self.stopProducing)
 
-    def handleDirectChunk(self, chunk):
+    def handleDirectChunk(self, chunk, offset = None):
         # debug: don't passthrough chunk 0!
         # if chunk == 0:
             # return False
@@ -122,6 +129,12 @@ class CachedRequest(object):
         # if this is the correct chunk, and is not yet available from cache
         if self.file.isCached(chunk):
             print 'turning down direct stream, it\'s already cached (should this happen?)'
+            return False
+
+        # is the offset ok for us?
+        if offset and self.chunk == self.chunk_first and offset < self.chunk_offset:
+            print 'turning down direct stream, no good offset'
+            self.sendChunk()
             return False
 
         print 'starting direct passthrough:', chunk
@@ -171,7 +184,9 @@ class CachedRequest(object):
             return
 
         # if we are paused (maybe add an additional condition for this?)
-        if self.direct_pause:
+        # note that we cannot turn this down if we are in an offset chunk,
+        # because the data is not going to be cached!
+        if not (self.chunk == self.chunk_first and self.chunk_offset) and self.direct_pause:
             # we are not supposed to send any data right now, so skip this one
 
             # this means that the data needs to be sent at a later point, which

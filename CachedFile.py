@@ -140,7 +140,7 @@ class CachedFile(object):
         if chunk not in self.chunks_cached and chunk not in self.chunks_queued and chunk not in self.chunks_active:
             self.waitForChunk(chunk, *args, **kwargs)
 
-    def waitForChunk(self, chunk, preload = 5, passthrough=True):
+    def waitForChunk(self, chunk, preload = 5, passthrough=True, offset=None):
 
         # it's already there? this shouldn't happen..
         if chunk in self.chunks_cached:
@@ -182,7 +182,11 @@ class CachedFile(object):
         else:
             end = start
 
-        self.chunks_queued += list(range(start,end+1))
+        # if we have an offset, don't count the first piece as queued
+        if not offset:
+            self.chunks_queued += list(range(start,end+1))
+        else:
+            self.chunks_queued += list(range(start+1,end+1))
 
         # initiate wait for chunk
         cliFac = CacheClientFactory(
@@ -191,7 +195,8 @@ class CachedFile(object):
                 self.rest,
                 self.path,
                 start,
-                end
+                end,
+                offset
             )
         reactor.connectTCP(self.host, self.port, cliFac)
 
@@ -219,11 +224,11 @@ class CachedFile(object):
                 w.callback(producer)
             del self.chunks_waiting[chunk]
 
-    def handleGotChunk(self, chunk, partial=False):
+    def handleGotChunk(self, chunk, partial = False):
 
         if chunk in self.chunks_queued:
             del self.chunks_queued[self.chunks_queued.index(chunk)]
-        else:
+        elif not partial:
             print 'debug: got unqueued chunk handle.. should this happen?'
 
         if chunk in self.chunks_active:

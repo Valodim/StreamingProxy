@@ -10,7 +10,7 @@ class CacheClient(HTTPClient):
 
     fd = None
 
-    def __init__(self, file, host, rest, path, chunk_first, chunk_last):
+    def __init__(self, file, host, rest, path, chunk_first, chunk_last, offset = 0):
 
         self.file = file
 
@@ -21,6 +21,7 @@ class CacheClient(HTTPClient):
 
         self.chunk_first = chunk_first
         self.chunk_last = chunk_last
+        self.offset = offset
 
         self.chunk = self.chunk_first
 
@@ -34,17 +35,20 @@ class CacheClient(HTTPClient):
         self.sendCommand('GET', self.rest)
 
         self.sendHeader('host', self.host)
-        self.sendHeader('range', 'bytes=%d-%d' % (self.chunk_first*self.file.chunksize, (self.chunk_last+1)*self.file.chunksize-1) )
+        if self.offset:
+            self.sendHeader('range', 'bytes=%d-%d' % (self.chunk_first*self.file.chunksize + self.offset, (self.chunk_last+1)*self.file.chunksize-1) )
+        else:
+            self.sendHeader('range', 'bytes=%d-%d' % (self.chunk_first*self.file.chunksize, (self.chunk_last+1)*self.file.chunksize-1) )
         self.sendHeader('connection', 'close')
 
-        print 'requesting chunks', self.chunk_first, 'to', self.chunk_last
+        print 'requesting chunks', self.chunk_first, 'to', self.chunk_last, 'with offset', self.offset
 
         self.endHeaders()
 
     def handleResponsePart(self, data):
 
         # is this request stale (ie, no longer queued)?
-        if not self.file.isQueued(self.chunk):
+        if not self.offset and not self.file.isQueued(self.chunk):
             print 'dropping download of stale chunk', self.chunk
 
             # notify of this end, just to be sure (redundant is not problematic)
@@ -64,20 +68,34 @@ class CacheClient(HTTPClient):
                 self.transport.loseConnection()
                 return
 
-            # prepare file handle and direct passthrough
-            self.fd = open(self.path + os.path.sep + str(self.chunk), 'wb')
-            self.file.handleActiveChunk(self.chunk, self)
-
-            print "writing chunk", self.chunk
-            self.written = 0
             self.chunk_buffer = StringIO()
+            self.file.handleActiveChunk(self.chunk, self)
+            if not self.offset:
+                # prepare file handle and direct passthrough
+                self.fd = open(self.path + os.path.sep + str(self.chunk), 'wb')
+
+                self.written = 0
+                print "processing chunk", self.chunk
+
+            else:
+                # to avoid getting into this very loop again
+                self.fd = True
+
+                self.chunk_buffer.seek(self.offset)
+                self.written = self.offset
+
+                print "processing chunk", self.chunk, 'from byte', self.offset
+
+
 
         write_len = self.file.chunksize-self.written
         if write_len > len(data):
             write_len = len(data)
 
         # write to file (we are primarily a cache, after all)
-        self.fd.write(data[:write_len])
+        # if there is an offset, we are not caching to disk
+        if not self.offset:
+            self.fd.write(data[:write_len])
         # buffer for later joining of direct consumers
         self.chunk_buffer.write(data[:write_len])
         self.written += write_len
@@ -90,9 +108,10 @@ class CacheClient(HTTPClient):
         if self.written == self.file.chunksize or (self.chunk == self.chunk_last and self.written == (self.file.length % self.file.chunksize) ):
             print "finished chunk", self.chunk
 
-            self.file.handleGotChunk(self.chunk)
+            self.file.handleGotChunk(self.chunk, not not self.offset)
 
-            self.fd.close()
+            if not self.offset:
+                self.fd.close()
             self.fd = None
             self.chunk_buffer.close()
             self.chunk_buffer = None
@@ -103,6 +122,7 @@ class CacheClient(HTTPClient):
                 self.directs = [ ]
 
             self.chunk += 1
+            self.offset = None
 
             if len(data) > write_len:
                 self.handleResponsePart(data[write_len:])
@@ -125,7 +145,7 @@ class CacheClient(HTTPClient):
             return
 
         # say we're here to supply
-        r = direct.handleDirectChunk(self.chunk)
+        r = direct.handleDirectChunk(self.chunk, self.offset)
         if not r:
             return
 
