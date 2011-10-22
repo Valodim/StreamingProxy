@@ -1,0 +1,8 @@
+
+ - break off caching requests once a) they are no longer requested and b) the bandwidth is needed elsewhere
+ - better directory naming, that hash is awful
+ - cache file metadata, or at least leave a note file in the cache dir
+
+ - fix bugs
+ - improve debugging output
+
