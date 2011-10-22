@@ -4,10 +4,6 @@ import os
 import sys
 
 from twisted.internet import reactor, defer
-from twisted.web.proxy import Proxy, ProxyRequest
-from twisted.protocols.basic import FileSender
-
-from zope.interface import implements
 
 from CacheClient import CacheClientFactory
 from CachedRequest import CachedRequest, UncachedRequest

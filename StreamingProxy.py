@@ -1,9 +1,9 @@
 import sys
 
 from twisted.python import log
-from twisted.internet import reactor, defer
+from twisted.internet import reactor
 from twisted.web import http
-from twisted.web.proxy import Proxy, ProxyRequest, ProxyClientFactory, ProxyClient
+from twisted.web.proxy import Proxy, ProxyRequest
 
 import CachedFile
 
