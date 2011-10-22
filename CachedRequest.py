@@ -251,10 +251,6 @@ class CachedRequest(object):
             self.direct_handled += len(buf)
 
 
-    def stopProducing(self, err = None):
-        print 'we were asked to stop producing.. very well'
-        self.direct_chunk = None
-
     def pauseProducing(self):
         """
             We are a streaming producer, so we can send data whenever we want.
@@ -267,6 +263,7 @@ class CachedRequest(object):
             self.direct_pause = True
             # reactor.callLater(5, self.resumeProducing)
 
+
     def resumeProducing(self):
         """
             On the other hand, if we are asked to resume, we might as well keep
@@ -276,6 +273,12 @@ class CachedRequest(object):
             print 'resume request?'
             self.direct_pause = False
             # self.sendChunk()
+
+
+    def stopProducing(self, err = None):
+        print 'we were asked to stop producing.. very well'
+        self.direct_chunk = None
+
 
 class UncachedRequest(CachedRequest):
     """

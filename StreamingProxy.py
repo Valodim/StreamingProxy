@@ -7,7 +7,7 @@ from twisted.web.proxy import Proxy, ProxyRequest, ProxyClientFactory, ProxyClie
 
 import CachedFile
 
-class InterceptingProxyRequest(ProxyRequest):
+class StreamingProxyRequest(ProxyRequest):
 
     def process(self):
 
@@ -25,7 +25,7 @@ class InterceptingProxyRequest(ProxyRequest):
             self.range_from, self.range_to = (None,None)
 
         # get the multiplexing cachedFile instance
-        self.file = CachedFile.cacheGet(self.uri)
+        self.file = CachedFile.cachedFileGet(self.uri)
 
         d = self.file.getInfo()
         if self.range_from is None:
@@ -35,18 +35,12 @@ class InterceptingProxyRequest(ProxyRequest):
             d.addCallback(self.rangeRequest)
         d.addErrback(self.someError)
 
-    def someError(self, x = None):
-        if x:
-            x.printTraceback()
 
-        print >> sys.stderr, 'Could not retrieve info'
-
-        self.transport.write("HTTP/1.0 501 Gateway Error\r\n")
-        self.transport.write("connection: close\r\n")
-
-        self.transport.write("\r\n")
-
-        self.transport.write("Something bad happened :(")
+    def connectionLost(self, reason):
+        print "lost connection!"
+        # if self.file is not None:
+            # self.file.stopReading()
+        # ProxyRequest.connectionLost(self, reason)
 
 
     def fullRequest(self, x = None):
@@ -84,19 +78,28 @@ class InterceptingProxyRequest(ProxyRequest):
         self.file.request(self.transport, self.range_from, self.range_to)
 
 
-    def connectionLost(self, reason):
-        print "lost connection!"
-        # if self.file is not None:
-            # self.file.stopReading()
-        # ProxyRequest.connectionLost(self, reason)
+    def someError(self, x = None):
+        if x:
+            x.printTraceback()
 
-class InterceptingProxy(Proxy):
-    requestFactory = InterceptingProxyRequest
+        print >> sys.stderr, 'Could not retrieve info'
+
+        self.transport.write("HTTP/1.0 501 Gateway Error\r\n")
+        self.transport.write("connection: close\r\n")
+
+        self.transport.write("\r\n")
+
+        self.transport.write("Something bad happened :(")
+
+
+class StreamingProxy(Proxy):
+    requestFactory = StreamingProxyRequest
+
 
 log.startLogging(sys.stdout)
 
 factory = http.HTTPFactory()
-factory.protocol = InterceptingProxy
+factory.protocol = StreamingProxy
 
 reactor.listenTCP(1234, factory)
 reactor.run()

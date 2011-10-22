@@ -15,7 +15,7 @@ import CacheUtils
 
 cachedFiles = { }
 
-def cacheGet(uri, *args, **kwargs):
+def cachedFileGet(uri, *args, **kwargs):
     # return cachedFile(uri, *args, **kwargs)
 
     if uri not in cachedFiles:
@@ -52,6 +52,10 @@ class CachedFile(object):
     chunks_waiting = { }
 
     got_info = False
+
+    length = None
+    type = None
+    etag = None
 
     def __init__(self, uri):
         """
