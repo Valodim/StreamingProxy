@@ -121,7 +121,7 @@ class CachedFile(object):
         self.ranged = 'accept-ranges' in headers and headers['accept-ranges'][0] == 'bytes'
 
         # in bytes, so this is 10MB
-        self.chunksize = CacheSettings.chunkSize
+        self.chunksize = int(CacheSettings.chunkSize(self.length))
         self.chunks = self.length / self.chunksize
 
         print "got info. length:", self.length, ', type:', self.type, ', etag:', self.etag, ', accepts range' if self.ranged else ''
