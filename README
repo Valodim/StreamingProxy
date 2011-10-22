@@ -1,0 +1,11 @@
+placeholder readme, improve later
+
+This is a specialized proxy for streamed content.
+
+Motivation: I disliked mplayer's buffering behavior, and wanted a local
+player-independent cache, so I took this opportunity to learn the excellent
+Twisted framework.
+
+Status: At this point, the software is mostly working. It does however have
+some drawbacks annoying enough to make it mostly unusable for daily business.
+Still a wip, hope I can get this out of alpha soon.
