@@ -8,6 +8,7 @@ from twisted.internet import reactor, defer
 from CacheClient import CacheClientFactory
 from CachedRequest import CachedRequest, UncachedRequest
 import CacheUtils
+import CacheSettings
 
 cachedFiles = { }
 
@@ -63,7 +64,7 @@ class CachedFile(object):
         self.uri = uri
         self.hash = hashlib.sha1(uri).hexdigest()
 
-        self.path = '/home/valodim/space/mlp/' + self.hash + '/'
+        self.path = CacheSettings.cachePath + self.hash
         if not os.access(self.path, os.F_OK):
             os.mkdir(self.path)
 
@@ -120,7 +121,7 @@ class CachedFile(object):
         self.ranged = 'accept-ranges' in headers and headers['accept-ranges'][0] == 'bytes'
 
         # in bytes, so this is 10MB
-        self.chunksize = 8*1024*1024
+        self.chunksize = CacheSettings.chunkSize
         self.chunks = self.length / self.chunksize
 
         print "got info. length:", self.length, ', type:', self.type, ', etag:', self.etag, ', accepts range' if self.ranged else ''
@@ -144,7 +145,7 @@ class CachedFile(object):
         chunk_last = range_to / self.chunksize
 
         # if this is a small request (< 128kb), don't do any caching
-        if range_to-range_from < 128*1024:
+        if range_to-range_from < CacheSettings.uncachedLength:
             # also, if it is not completely cached
             if not (chunk_first in self.chunks_cached and chunk_last in self.chunks_cached):
                 req = UncachedRequest(self, consumer, range_from, range_to)

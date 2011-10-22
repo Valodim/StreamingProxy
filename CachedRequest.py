@@ -5,6 +5,7 @@ from zope.interface import implements
 
 from CacheSender import CacheSender
 from UncachedClient import UncachedClientFactory
+import CacheSettings
 
 class CachedRequest(object):
     """
@@ -87,7 +88,7 @@ class CachedRequest(object):
 
             print "waiting for chunk", self.chunk
             # is the offset more than 20% of a chunksize?
-            if self.chunk == self.chunk_first and self.direct_handled > 0.2 * self.file.chunksize:
+            if self.chunk == self.chunk_first and self.direct_handled > CacheSettings.uncachedOffset:
                 # work with a partial (uncached!) chunk, then.  if we don't do
                 # this, we get a delay of (chunksize-offset)/transferspeed
                 # before we get any useful data!
