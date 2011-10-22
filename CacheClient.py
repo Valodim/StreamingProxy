@@ -31,6 +31,10 @@ class CacheClient(HTTPClient):
         self.directs = [ ]
 
     def connectionMade(self):
+        """
+            Once a connection is made, this method sends the HTTP headers to
+            request the desired data from the server.
+        """
 
         self.sendCommand('GET', self.rest)
 
@@ -46,6 +50,13 @@ class CacheClient(HTTPClient):
         self.endHeaders()
 
     def handleResponsePart(self, data):
+        """
+            The heart of the class. This is called when new data is retrieved,
+            which will be forwarded into the disk cache as well as passthrough
+            clients.
+
+            TODO: break this down into smaller methods?
+        """
 
         # is this request stale (ie, no longer queued)?
         if not self.offset and not self.file.isQueued(self.chunk):
@@ -131,6 +142,13 @@ class CacheClient(HTTPClient):
             print 'WTF: written > chunksize? should never happen!'
 
     def handleResponseEnd(self):
+        """
+            Handler for the end of retrieved data. Forwards the info to
+            passthrough clients.
+
+            TODO: This is called twice frequently.. I wonder why?
+        """
+
         # notify of this end, just to be sure (redundant is not problematic)
         if self.directs:
             for direct in self.directs:
@@ -139,6 +157,12 @@ class CacheClient(HTTPClient):
         print "response end :)"
 
     def registerConsumer(self, direct):
+        """
+            This is called by CachedRequest (or any compatible object) to
+            request passthrough data.
+
+            TODO: rename this method, it's confusing with Twisted's interfaces!
+        """
         # just a sanity check
         if direct in self.directs:
             print >> sys.stderr, 'WTF: duplicate direct consumer registration'

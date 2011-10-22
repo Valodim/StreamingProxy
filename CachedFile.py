@@ -24,6 +24,21 @@ def cacheGet(uri, *args, **kwargs):
     return cachedFiles[uri]
 
 class CachedFile(object):
+    """
+        A CachedFile object basically represents one remote file, and
+        is unique per uri. There is one unique CachedFile for each uri,
+        which can be obtained (or created) using the cacheGet method.
+
+        Once created, a CachedFile provides the getInfo() method to access the
+        information the server provides for the file from a HTTP HEAD, most
+        notably its size.
+        Using the request() method, ranges of data can be requested for a given
+        consumer, with all disk and memory caching handled internally.
+
+        A lot of interface is also provided for (Un-)CachedRequest
+        coordination.
+
+    """
 
     ports = { "http" : 80 }
 
@@ -40,9 +55,9 @@ class CachedFile(object):
 
     def __init__(self, uri):
         """
-        What this is supposed to do:
-         - find out length of file, possibly get ETag
-         - determine reasonable chunk size
+            Initialize a CachedFile. Not much going on here, except parsing the
+            uri and setting some variables. To get info on the file, call
+            getInfo() subsequently
         """
 
         self.uri = uri
@@ -69,6 +84,12 @@ class CachedFile(object):
         self.headers['host'] = self.host
 
     def getInfo(self):
+        """
+            Request the info obtainable from a HTTP HEAD.
+
+            For reasons, the deferred does not return the info, it is just a
+            notification that the attributes of this object are now available.
+        """
 
         if self.got_info:
             d = defer.Deferred()
@@ -77,13 +98,18 @@ class CachedFile(object):
 
         # no info in cache? request it
         d = CacheUtils.getUriHEAD(self.uri, self.headers)
-        d.addCallback(self.handleInfo)
+        d.addCallback(self.__handleInfo)
 
         # and once we have it, fire our deferred
         return d
 
 
-    def handleInfo(self, headers):
+    def __handleInfo(self, headers):
+        """
+            Internal callback used with CacheUtils.getUriHEAD to retrieve HTTP
+            HEAD info.
+        """
+
         self.got_info = True
 
         self.length = int(headers['content-length'][0])
@@ -107,6 +133,13 @@ class CachedFile(object):
         # self.waitForChunk(self.chunks, doPreload=False)
 
     def request(self, consumer, range_from, range_to):
+        """
+            This method hooks up a consumer with data from a specified range,
+            managing cache inbetween and issuing server requests as necessary.
+
+            For requests smaller than 128 kilobytes, the request will be handled
+            directly, with no caching performed.
+        """
         chunk_first = range_from / self.chunksize
         chunk_last = range_to / self.chunksize
 
@@ -141,16 +174,42 @@ class CachedFile(object):
                     self.chunks_cached.append( i )
 
     def isQueued(self, chunk):
+        """ Simple getter, returns whether or not chunk is currently queued """
         return chunk in self.chunks_queued
 
     def isCached(self, chunk):
+        """ Simple getter, returns whether or not chunk is currently cached """
         return chunk in self.chunks_cached
 
     def anticipateChunk(self, chunk, *args, **kwargs):
+        """
+            This method may be called to inform about an expected chunk
+            request, to allow preemptive caching.
+        """
         if chunk not in self.chunks_cached and chunk not in self.chunks_queued and chunk not in self.chunks_active:
             self.waitForChunk(chunk, *args, **kwargs)
 
     def waitForChunk(self, chunk, preload = 5, passthrough=True, offset=None):
+        """
+            This method is called by CachedRequest to announce interest in a
+            chunk one way or another. It is the only place where CacheClients
+            are launched to load chunks into cache.
+
+            The preload parameter may be specified to state interest in following
+            chunks, which will be loaded in the same request.
+
+            The returned deferred will be called once the chunk is readily
+            cached, with a value of None.
+
+            If a chunk is being loaded, the callback will be instant with the
+            producer as parameter, which should be ready to provide
+            passthrough. This behavior may be disabled by passthrough=False, if
+            passthrough is not desired.
+
+            An offset may be passed, which will provide faster results since
+            the data does not have to be fetched from the beginning of the
+            chunk. However, this will prevent caching of that chunk.
+        """
 
         # it's already there? this shouldn't happen..
         if chunk in self.chunks_cached:
@@ -220,6 +279,17 @@ class CachedFile(object):
         return d
 
     def handleActiveChunk(self, chunk, producer):
+        """
+            Handler function, to be called from CachedRequest when a new chunk
+            is being downloaded.
+            This is central to passthrough connections in either of two ways:
+             - requests known to be waiting at the time of calling (from
+               self.chunks_waiting) will be notified of this active chunk
+             - the producer is registered as active (self.chunks_active)
+               so that subsequent requests calling waitForChunk can be hooked
+               up with the it
+        """
+
         print 'active chunk: ', chunk
 
         if chunk in self.chunks_active:
@@ -235,6 +305,14 @@ class CachedFile(object):
             del self.chunks_waiting[chunk]
 
     def handleGotChunk(self, chunk, partial = False):
+        """
+            Handler function, to be called from CachedRequest when the download
+            of a chunk has finished (and it is now cached).
+
+            Most importantly, this is required for notifying requests about the
+            availability from cache, and provide transition from passthrough
+            streaming.
+        """
 
         if chunk in self.chunks_queued:
             del self.chunks_queued[self.chunks_queued.index(chunk)]

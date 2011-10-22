@@ -10,6 +10,15 @@ class CachedRequest(object):
     """
         This class delivers a specific range of a file to a consumer,
         taking care of all intermediate caching (at some point :) )
+
+        It will mostly work with its associated CachedFile to spawn
+        CachedClient, UncachedClient and CacheSender instances to get
+        data.
+
+        Data may be passed to the consumer either by delegating producers, ie.
+        using a CacheSender. It may also be passed through the CachedRequest
+        itself, acting as a streaming PushProducer.
+
     """
 
     implements(interfaces.IPushProducer)
@@ -40,8 +49,20 @@ class CachedRequest(object):
         self.sendChunk()
 
     def sendChunk(self, producer = None):
+        """
+            This method runs through a number of ways to retrieve data, either
+            from a deferred (ie, finished CacheClient), or as an internal
+            loopback if new information came up. It also handles chunk
+            transition, and finishes the request when it is finished.
 
-        # print 'sendchunk', self
+            Attempts to get data, in order of execution:
+             - cached file
+             - passthrough from passed producer
+             - queue with CachedFile.waitForChunk()
+
+            When reading from cache, a call to anticipateChunk will be
+            made to enable preloading of at least three chunks.
+        """
 
         if self.chunk > self.chunk_last:
             self.d.callback(self)
@@ -108,9 +129,14 @@ class CachedRequest(object):
         d.addErrback(self.stopProducing)
 
     def handleDirectChunk(self, chunk, offset = None):
-        # debug: don't passthrough chunk 0!
-        # if chunk == 0:
-            # return False
+        """
+            Called to register a producer of direct data. The returning
+            boolean value indicates whether this was accepted or not,
+            and data must only be sent on True.
+
+            Reasons for rejection are wrong chunk, if the file has been cached
+            in the meantime, or if the provided offset is bigger than requred.
+        """
 
         if self.chunk != chunk:
             print 'WTF: turning down direct stream, wrong chunk?!'
@@ -146,6 +172,16 @@ class CachedRequest(object):
         return True
 
     def handleDirectChunkEnd(self, chunk):
+        """
+            This is called by a producer who registered before with
+            handleDirectChunk and didn't get rejected, to indicate the end of
+            its passthrough data.
+
+            This may happen in the middle of a chunk, which will then be asked
+            for in sendChunk as usual. If the file is cached at that point,
+            this will work as a smooth transition.
+        """
+
         if self.direct_chunk is None:
             return
 
@@ -223,8 +259,8 @@ class CachedRequest(object):
         """
             We are a streaming producer, so we can send data whenever we want.
             However, getting a pauseProducing hint means we are ahead of
-            schedule, so we set a switch which will decline direct passthrough
-            at a later point (in favor of cached file data)
+            schedule, so we set a switch which will slow down or even decline
+            direct passthrough at a later point (in favor of cached file data)
         """
         if not self.direct_pause:
             print 'pause request?'
@@ -242,6 +278,16 @@ class CachedRequest(object):
             # self.sendChunk()
 
 class UncachedRequest(CachedRequest):
+    """
+        An uncached request is very much like a cached one and implements the
+        same interfaces. It does however drop the entire caching layer, simply
+        streaming from the server.
+
+        This is mostly useful for small pieces of data that do not require
+        caching (such as index lookups)
+
+        TODO: Does this need to inherit CachedRequest?
+    """
 
     def __init__(self, file, consumer, range_from, range_to):
 
