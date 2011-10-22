@@ -4,19 +4,8 @@ from twisted.python import log
 from twisted.internet import reactor, defer
 from twisted.web import http
 from twisted.web.proxy import Proxy, ProxyRequest, ProxyClientFactory, ProxyClient
-from cStringIO import StringIO
 
-from CachedFile import CachedFile, CachedRequest
-
-cachedFiles = { }
-
-def cacheGet(uri, *args, **kwargs):
-    # return cachedFile(uri, *args, **kwargs)
-
-    if uri not in cachedFiles:
-        cachedFiles[uri] = CachedFile(uri, *args, **kwargs)
-
-    return cachedFiles[uri]
+import CachedFile
 
 class InterceptingProxyRequest(ProxyRequest):
 
@@ -36,7 +25,7 @@ class InterceptingProxyRequest(ProxyRequest):
             self.range_from, self.range_to = (None,None)
 
         # get the multiplexing cachedFile instance
-        self.file = cacheGet(self.uri)
+        self.file = CachedFile.cacheGet(self.uri)
 
         d = self.file.getInfo()
         if self.range_from is None:

@@ -13,6 +13,16 @@ from CacheClient import CacheClientFactory
 from CachedRequest import CachedRequest, UncachedRequest
 import CacheUtils
 
+cachedFiles = { }
+
+def cacheGet(uri, *args, **kwargs):
+    # return cachedFile(uri, *args, **kwargs)
+
+    if uri not in cachedFiles:
+        cachedFiles[uri] = CachedFile(uri, *args, **kwargs)
+
+    return cachedFiles[uri]
+
 class CachedFile(object):
 
     ports = { "http" : 80 }
