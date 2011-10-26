@@ -28,6 +28,7 @@ class CachedRequest(object):
     direct_pause = False
 
     direct_handled = 0
+    direct_pausecount = 0
 
     def __init__(self, file, consumer, chunk_first, chunk_last, chunk_offset, chunk_last_length):
         self.file = file
@@ -117,6 +118,7 @@ class CachedRequest(object):
         # advance chunk by one, reset runtime vars
         self.chunk += 1
         self.direct_handled = 0
+        self.direct_pausecount = 0
         self.direct_pause = False
 
         # connect the producer
@@ -186,7 +188,7 @@ class CachedRequest(object):
         if self.direct_chunk is None:
             return
 
-        print 'finished direct passthrough: ', chunk, ', handled', self.direct_handled, 'bytes'
+        print 'finished direct passthrough: ', chunk, ', handled', self.direct_handled, 'bytes with', self.direct_pausecount, 'waits'
 
         if chunk != self.chunk:
             print 'WTF: wrong end of direct chunk?!', chunk, self.direct_chunk
@@ -260,9 +262,9 @@ class CachedRequest(object):
             direct passthrough at a later point (in favor of cached file data)
         """
         if not self.direct_pause:
-            print 'pause request?'
+            # print 'pause request?'
             self.direct_pause = True
-            # reactor.callLater(5, self.resumeProducing)
+            self.direct_pausecount += 1
 
 
     def resumeProducing(self):
@@ -271,9 +273,9 @@ class CachedRequest(object):
             going with the passthrough :)
         """
         if self.direct_pause:
-            print 'resume request?'
+            # print 'resume request?'
             self.direct_pause = False
-            # self.sendChunk()
+            self.direct_pausecount += 1
 
 
     def stopProducing(self, err = None):
