@@ -1,11 +1,27 @@
-placeholder readme, improve later
 
 This is a specialized proxy for streamed content.
 
-Motivation: I disliked mplayer's buffering behavior, and wanted a local
-player-independent cache, so I took this opportunity to learn the excellent
-Twisted framework.
+== Motivation ==
+I disliked mplayer's buffering behavior, and wanted a local player-independent
+cache, so I took this opportunity to learn the excellent Twisted framework.
 
-Status: At this point, the software is mostly working. It does however have
-some drawbacks annoying enough to make it mostly unusable for daily business.
-Still a wip, hope I can get this out of alpha soon.
+== Use Case ==
+Most media players provide only buffering, but no caching functionality. This
+means that even a small seek outside the buffered range will invalidate the
+entire buffer and establish a new connection.
+
+However, a http proxy is usually supported, which is very suited for providing
+a local player-independent layer of caching. In this proxy, we have entire
+control over all caching, without changing the URI that needs to be called.
+
+This has several benefits:
+ - for a little disk space, we get instant seeking in the entire cached part of
+   any streamed content
+ - this cache is shared among players
+ - we can pre-cache videos for fast, stable and network-independent access at
+   a later point
+ - our cache is written in python, we can make it do what we want :)
+
+== Status ==
+At this point, the software is mostly working. There are some essential
+features missing though (see TODO), and the stability is early beta at most.

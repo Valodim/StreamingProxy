@@ -16,4 +16,4 @@ chunkSize = lambda x: max(512*1024, min(6*1024*1024, x / 100))
 uncachedOffset = 512*1024
 
 # the maximum length of a file that is not cached at all
-uncachedLength = 128*1024
+uncachedLength = 1024*1024
