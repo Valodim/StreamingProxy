@@ -29,7 +29,6 @@ class StreamingProxyRequest(ProxyRequest):
 
         d = self.file.getInfo()
         if self.range_from is None:
-            print "full request"
             d.addCallback(self.fullRequest)
         else:
             d.addCallback(self.rangeRequest)

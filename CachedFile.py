@@ -39,20 +39,6 @@ class CachedFile(object):
 
     ports = { "http" : 80 }
 
-    # already cached chunks
-    chunks_cached = [ ]
-    # queued chunks
-    chunks_queued = [ ]
-    # active chunks
-    chunks_active = { }
-
-    chunks_waiting = { }
-
-    got_info = False
-
-    length = None
-    type = None
-    etag = None
 
     def __init__(self, uri):
         """
@@ -60,6 +46,21 @@ class CachedFile(object):
             uri and setting some variables. To get info on the file, call
             getInfo() subsequently
         """
+
+        # already cached chunks
+        self.chunks_cached = [ ]
+        # queued chunks
+        self.chunks_queued = [ ]
+        # active chunks
+        self.chunks_active = { }
+
+        self.chunks_waiting = { }
+
+        self.got_info = False
+
+        self.length = None
+        self.type = None
+        self.etag = None
 
         self.uri = uri
         self.hash = hashlib.sha1(uri).hexdigest()
@@ -145,7 +146,7 @@ class CachedFile(object):
         chunk_last = range_to / self.chunksize
 
         # if this is a small request (< 128kb), don't do any caching
-        if range_to-range_from < CacheSettings.uncachedLength:
+        if range_to-range_from < CacheSettings.uncachedLength or self.length < CacheSettings.uncachedLength:
             # also, if it is not completely cached
             if not (chunk_first in self.chunks_cached and chunk_last in self.chunks_cached):
                 req = UncachedRequest(self, consumer, range_from, range_to)
